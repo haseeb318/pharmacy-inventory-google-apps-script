@@ -1,0 +1,109 @@
+<section
+  class="page-section"
+  data-page="reports"
+  data-title="Reports"
+  data-subtitle="Analyze daily and monthly sales, purchases, and low stock"
+>
+  <div class="toolbar">
+    <div class="segmented-control" aria-label="Report type">
+      <button class="segment active" type="button" data-report-type="sales">
+        Sales
+      </button>
+      <button class="segment" type="button" data-report-type="purchases">
+        Purchases
+      </button>
+      <button class="segment" type="button" data-report-type="lowstock">
+        Low Stock
+      </button>
+    </div>
+    <div class="button-group">
+      <button
+        class="button button-ghost"
+        type="button"
+        data-report-export="pdf"
+      >
+        Export PDF
+      </button>
+      <button
+        class="button button-ghost"
+        type="button"
+        data-report-export="excel"
+      >
+        Export Excel
+      </button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-search">
+      <label class="sr-only" for="reports-search">Search report</label>
+      <input
+        id="reports-search"
+        type="search"
+        placeholder="Search report rows"
+        data-reports-search
+      />
+    </div>
+    <div
+      class="toolbar-filters"
+      id="reports-date-filters"
+      data-reports-date-filters
+    >
+      <label class="sr-only" for="reports-date-from">From date</label>
+      <input
+        id="reports-date-from"
+        type="date"
+        aria-label="From date"
+        data-reports-date-from
+      />
+      <label class="sr-only" for="reports-date-to">To date</label>
+      <input
+        id="reports-date-to"
+        type="date"
+        aria-label="To date"
+        data-reports-date-to
+      />
+      <button
+        class="button button-ghost button-small"
+        type="button"
+        data-reports-clear-dates
+      >
+        Clear Dates
+      </button>
+    </div>
+  </div>
+
+  <article class="card">
+    <div class="card-header">
+      <h2 id="reports-title">Sales Report</h2>
+      <div class="card-meta">
+        <span id="reports-count" class="status-pill">0 records</span>
+        <span id="reports-summary" class="status-pill">Loading…</span>
+      </div>
+    </div>
+    <div id="reports-status" class="empty-state">Loading report data…</div>
+    <div id="reports-table-wrapper" class="table-wrap" hidden>
+      <table class="data-table">
+        <thead id="reports-table-head"></thead>
+        <tbody id="reports-table-body"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="reports-pagination" hidden>
+      <button
+        class="button button-ghost button-small"
+        type="button"
+        data-reports-prev
+      >
+        Previous
+      </button>
+      <span id="reports-pagination-summary">Showing 0 records</span>
+      <button
+        class="button button-ghost button-small"
+        type="button"
+        data-reports-next
+      >
+        Next
+      </button>
+    </div>
+  </article>
+</section>

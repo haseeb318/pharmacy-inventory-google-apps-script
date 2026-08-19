@@ -1,0 +1,4906 @@
+<script>
+  const App = (() => {
+    const SESSION_TOKEN_KEY = "app_session_token";
+
+    function getStoredSessionToken() {
+      return (
+        localStorage.getItem(SESSION_TOKEN_KEY) ||
+        sessionStorage.getItem(SESSION_TOKEN_KEY) ||
+        null
+      );
+    }
+
+    function storeSessionToken(token) {
+      localStorage.setItem(SESSION_TOKEN_KEY, token);
+      sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    }
+
+    function clearStoredSessionToken() {
+      localStorage.removeItem(SESSION_TOKEN_KEY);
+      sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    }
+
+    const state = {
+      currentPage: "dashboard",
+      sessionToken: getStoredSessionToken(),
+      user: null,
+      pages: new Map(),
+      dashboardLoaded: false,
+      dashboardData: null,
+      users: {
+        loaded: false,
+        records: [],
+        roles: [],
+        statuses: [],
+        query: "",
+        role: "",
+        status: "",
+        page: 1,
+        pageSize: 10,
+      },
+      items: {
+        loaded: false,
+        records: [],
+        categories: [],
+        units: [],
+        query: "",
+        category: "",
+        stockFilter: "",
+        expiryFilter: "",
+        page: 1,
+        pageSize: 10,
+      },
+      confirmResolver: null,
+      purchases: {
+        loaded: false,
+        records: [],
+        items: [],
+        suppliers: [],
+        query: "",
+        page: 1,
+        pageSize: 10,
+      },
+      sales: {
+        loaded: false,
+        records: [],
+        items: [],
+        customers: [],
+        query: "",
+        page: 1,
+        pageSize: 10,
+      },
+      reports: {
+        loaded: false,
+        metaLoaded: false,
+        currentType: "daily-sales",
+        data: null,
+        query: "",
+        dateFrom: "",
+        dateTo: "",
+        page: 1,
+        pageSize: 10,
+      },
+      settings: {
+        loaded: false,
+        data: {},
+      },
+      inventory: {
+        loaded: false,
+        summary: [],
+        batches: [],
+        query: "",
+        filter: "all",
+        expiryWarningDays: 30,
+        page: 1,
+        pageSize: 10,
+        batchCache: {},
+      },
+    };
+
+    const selectors = {
+      app: "#app",
+      pageRoot: "#page-root",
+      page: ".page-section",
+      menuLink: ".menu-link",
+      routeButton: "[data-route-button]",
+      pageTitle: "#page-title",
+      pageSubtitle: "#page-subtitle",
+      sidebarToggle: "#sidebar-toggle",
+      globalSearch: "#global-search-input",
+      loadingOverlay: "#loading-overlay",
+      toastRegion: "#toast-region",
+      confirmDialog: "#confirm-dialog",
+      confirmMessage: "#confirm-message",
+      userName: "#user-name",
+      userRole: "#user-role",
+      userAvatar: ".user-avatar",
+      dashboardUpdatedAt: "#dashboard-updated-at",
+      dashboardRecentSales: "#dashboard-recent-sales",
+      dashboardRecentPurchases: "#dashboard-recent-purchases",
+      dashboardLowStock: "#dashboard-low-stock",
+      dashboardSalesBar: "#dashboard-sales-bar",
+      dashboardPurchasesBar: "#dashboard-purchases-bar",
+      dashboardSalesCount: "#dashboard-sales-count",
+      dashboardPurchasesCount: "#dashboard-purchases-count",
+      dashboardChartSalesTotal: "#dashboard-chart-sales-total",
+      dashboardChartPurchasesTotal: "#dashboard-chart-purchases-total",
+      usersSearch: "[data-users-search]",
+      usersRoleFilter: "[data-users-role-filter]",
+      usersStatusFilter: "[data-users-status-filter]",
+      usersTableBody: "#users-table-body",
+      usersCount: "#users-count",
+      usersSummary: "#users-pagination-summary",
+      usersPrev: "[data-users-prev]",
+      usersNext: "[data-users-next]",
+      userModal: "#user-modal",
+      userModalTitle: "#user-modal-title",
+      userForm: "#user-form",
+      userFormError: "#user-form-error",
+      userIdInput: "#user-id",
+      userNameInput: "#user-name-input",
+      userEmailInput: "#user-email-input",
+      userRoleInput: "#user-role-input",
+      userStatusInput: "#user-status-input",
+      userPasswordInput: "#user-password-input",
+      userPasswordHelp: "#user-password-help",
+      itemsSearch: "[data-items-search]",
+      itemsCategoryFilter: "[data-items-category-filter]",
+      itemsStockFilter: "[data-items-stock-filter]",
+      itemsExpiryFilter: "[data-items-expiry-filter]",
+      itemsTableBody: "#items-table-body",
+      itemsCount: "#items-count",
+      itemsSummary: "#items-pagination-summary",
+      itemsPagination: "#items-pagination",
+      itemsPrev: "[data-items-prev]",
+      itemsNext: "[data-items-next]",
+      itemModal: "#item-modal",
+      itemModalTitle: "#item-modal-title",
+      itemForm: "#item-form",
+      itemFormError: "#item-form-error",
+      itemIdInput: "#item-id",
+      itemNameInput: "#item-name-input",
+      itemDescriptionInput: "#item-description-input",
+      itemCategoryInput: "#item-category-input",
+      itemUnitInput: "#item-unit-input",
+      itemImageInput: "#item-image-input",
+      itemCostPriceInput: "#item-cost-price-input",
+      itemSellingPriceInput: "#item-selling-price-input",
+      itemCurrentStockInput: "#item-current-stock-input",
+      itemStatusInput: "#item-status-input",
+      itemMinimumStockInput: "#item-minimum-stock-input",
+      itemManufacturerInput: "#item-manufacturer-input",
+      itemShelfLocationInput: "#item-shelf-location-input",
+      purchasesSearch: "[data-purchases-search]",
+      purchasesTableBody: "#purchases-table-body",
+      purchasesCount: "#purchases-count",
+      purchasesSummary: "#purchases-summary",
+      purchasesPagination: "#purchases-pagination",
+      purchasesPrev: "[data-purchases-prev]",
+      purchasesNext: "[data-purchases-next]",
+      purchaseModal: "#purchase-modal",
+      purchaseModalTitle: "#purchase-modal-title",
+      purchaseForm: "#purchase-form",
+      purchaseFormError: "#purchase-form-error",
+      purchaseIdInput: "#purchase-id",
+      purchaseItemInput: "#purchase-item-input",
+      purchaseQuantityInput: "#purchase-quantity-input",
+      purchaseUnitPriceInput: "#purchase-unit-price-input",
+      purchaseCostPriceInput: "#purchase-cost-price-input",
+      purchaseSellingPriceInput: "#purchase-selling-price-input",
+      purchaseTotalCostInput: "#purchase-total-cost-input",
+      purchaseSupplierInput: "#purchase-supplier-input",
+      purchaseBatchInput: "#purchase-batch-input",
+      purchaseExpiryInput: "#purchase-expiry-input",
+      purchaseDateInput: "#purchase-date-input",
+      purchaseNotesInput: "#purchase-notes-input",
+      salesSearch: "[data-sales-search]",
+      salesTableBody: "#sales-table-body",
+      salesCount: "#sales-count",
+      salesSummary: "#sales-summary",
+      salesPagination: "#sales-pagination",
+      salesPrev: "[data-sales-prev]",
+      salesNext: "[data-sales-next]",
+      saleModal: "#sale-modal",
+      saleModalTitle: "#sale-modal-title",
+      saleForm: "#sale-form",
+      saleFormError: "#sale-form-error",
+      saleIdInput: "#sale-id",
+      saleItemInput: "#sale-item-input",
+      saleQuantityInput: "#sale-quantity-input",
+      saleUnitPriceInput: "#sale-unit-price-input",
+      saleTotalPriceInput: "#sale-total-price-input",
+      saleCustomerNameInput: "#sale-customer-name-input",
+      saleDoctorNameInput: "#sale-doctor-name-input",
+      salePatientNameInput: "#sale-patient-name-input",
+      saleCustomerEmailInput: "#sale-customer-email-input",
+      saleCustomerPhoneInput: "#sale-customer-phone-input",
+      saleDateInput: "#sale-date-input",
+      salePaymentMethodInput: "#sale-payment-method-input",
+      saleStatusInput: "#sale-status-input",
+      saleNotesInput: "#sale-notes-input",
+      saleInvoiceNumber: "#sale-invoice-number",
+      reportsSegments: "[data-report-type]",
+      reportsExportButtons: "[data-report-export]",
+      reportsSearch: "[data-reports-search]",
+      reportsDateFilters: "[data-reports-date-filters]",
+      reportsDateFrom: "[data-reports-date-from]",
+      reportsDateTo: "[data-reports-date-to]",
+      reportsClearDates: "[data-reports-clear-dates]",
+      reportsTitle: "#reports-title",
+      reportsCount: "#reports-count",
+      reportsSummary: "#reports-summary",
+      reportsStatus: "#reports-status",
+      reportsTableWrapper: "#reports-table-wrapper",
+      reportsTableHead: "#reports-table-head",
+      reportsTableBody: "#reports-table-body",
+      reportsPagination: "#reports-pagination",
+      reportsPaginationSummary: "#reports-pagination-summary",
+      reportsPrev: "[data-reports-prev]",
+      reportsNext: "[data-reports-next]",
+      // Settings
+      settingsSaveBtn: "[data-action='settings-save']",
+      settingsResetBtn: "[data-action='settings-reset']",
+      settingsFormError: "#settings-form-error",
+      settingsCompanyName: "#settings-company-name",
+      settingsCompanyEmail: "#settings-company-email",
+      settingsCompanyPhone: "#settings-company-phone",
+      settingsCompanyAddress: "#settings-company-address",
+      settingsLogoUrl: "#settings-logo-url",
+      settingsLogoPreviewWrap: "#settings-logo-preview-wrap",
+      settingsLogoPreview: "#settings-logo-preview",
+      settingsInvoicePrefix: "#settings-invoice-prefix",
+      settingsInvoiceNextNo: "#settings-invoice-next-no",
+      settingsCurrency: "#settings-currency",
+      settingsCurrencySymbol: "#settings-currency-symbol",
+      settingsTaxLabel: "#settings-tax-label",
+      settingsTaxRate: "#settings-tax-rate",
+      settingsTimezone: "#settings-timezone",
+      settingsDateFormat: "#settings-date-format",
+      settingsLowStockAlert: "#settings-low-stock-alert",
+      settingsDarkMode: "#settings-dark-mode",
+      settingsLanguage: "#settings-language",
+      settingsPreviewTaxLabel: "#settings-preview-tax-label",
+      settingsPreviewTaxAmount: "#settings-preview-tax-amount",
+      settingsPreviewPrice: "#settings-preview-price",
+      settingsPreviewTotal: "#settings-preview-total",
+    };
+
+    const formatters = {
+      currency: new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "PKR",
+        maximumFractionDigits: 2,
+      }),
+      number: new Intl.NumberFormat("en-US", {
+        maximumFractionDigits: 2,
+      }),
+      date: new Intl.DateTimeFormat("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+      }),
+      dateTime: new Intl.DateTimeFormat("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+    function debounce(func, wait) {
+      let timeout;
+      return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+      };
+    }
+
+    function formatDateForInput_(dateVal) {
+      if (!dateVal) return "";
+      const s = String(dateVal).trim();
+      if (!s) return "";
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return s;
+      }
+
+      const ymdMatch = s.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (ymdMatch) {
+        return ymdMatch[1];
+      }
+
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
+
+      return "";
+    }
+
+    function init() {
+      cachePages();
+      bindEvents();
+      hideAllViews();
+      loadBootstrap();
+    }
+
+    function hideAllViews() {
+      const page = document.querySelector("#login-page");
+      const appShell = document.querySelector("#app");
+      if (page) page.style.display = "none";
+      if (appShell) appShell.style.display = "none";
+    }
+
+    function cachePages() {
+      document.querySelectorAll(selectors.page).forEach((section) => {
+        state.pages.set(section.dataset.page, {
+          element: section,
+          title: section.dataset.title || "Inventory",
+          subtitle: section.dataset.subtitle || "",
+        });
+      });
+    }
+
+    function bindEvents() {
+      window.addEventListener("hashchange", () => navigate(getInitialRoute()));
+
+      document.querySelectorAll(selectors.menuLink).forEach((link) => {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          navigate(link.dataset.route);
+        });
+      });
+
+      document.querySelectorAll(selectors.routeButton).forEach((button) => {
+        button.addEventListener("click", () =>
+          navigate(button.dataset.routeButton),
+        );
+      });
+
+      document
+        .querySelector(selectors.sidebarToggle)
+        .addEventListener("click", toggleSidebar);
+
+      document.querySelector(selectors.globalSearch).addEventListener(
+        "input",
+        debounce((event) => {
+          filterCurrentPage(event.target.value);
+        }, 200),
+      );
+
+      document
+        .querySelectorAll('[data-action="refresh-page"]')
+        .forEach((button) => {
+          button.addEventListener("click", () => {
+            refreshCurrentPage();
+          });
+        });
+
+      bindConfirmDialog();
+      bindAuthEvents();
+      bindUsersModule();
+      bindItemsModule();
+      bindPurchasesModule();
+      bindSalesModule();
+      bindReportsModule();
+      bindInventoryModule();
+      bindSettingsModule();
+    }
+
+    function getInitialRoute() {
+      return (
+        normalizeRoute(window.location.hash.replace("#", "")) || "dashboard"
+      );
+    }
+
+    function normalizeRoute(route) {
+      const value = String(route || "")
+        .trim()
+        .toLowerCase();
+      return state.pages.has(value) ? value : "";
+    }
+
+    const ADMIN_ONLY_ROUTES = ["users", "items", "purchases", "settings"];
+    const STAFF_REPORT_TYPES = ["sales", "purchases", "lowstock"];
+
+    function getDefaultReportTypeForRole(role) {
+      return "sales";
+    }
+
+    function isReportTypeAllowedForRole(reportType, role) {
+      return STAFF_REPORT_TYPES.includes(reportType);
+    }
+
+    function navigate(route, options = {}) {
+      let nextPage = normalizeRoute(route) || "dashboard";
+
+      // Role permission navigation guard
+      if (
+        state.user &&
+        state.user.role === "Staff" &&
+        ADMIN_ONLY_ROUTES.includes(nextPage)
+      ) {
+        toast("Access Denied: Admin privileges required.", "warning");
+        nextPage = "dashboard";
+      }
+
+      const pageConfig = state.pages.get(nextPage);
+
+      state.pages.forEach((config, pageName) => {
+        const isActive = pageName === nextPage;
+        config.element.classList.toggle("active", isActive);
+        config.element.setAttribute("aria-hidden", String(!isActive));
+      });
+
+      document.querySelectorAll(selectors.menuLink).forEach((link) => {
+        const isActive = link.dataset.route === nextPage;
+        link.classList.toggle("active", isActive);
+        link.setAttribute("aria-current", isActive ? "page" : "false");
+      });
+
+      document.querySelector(selectors.pageTitle).textContent =
+        pageConfig.title;
+      document.querySelector(selectors.pageSubtitle).textContent =
+        pageConfig.subtitle;
+      document.querySelector(selectors.globalSearch).value = "";
+      state.currentPage = nextPage;
+      closeSidebar();
+
+      if (window.location.hash !== `#${nextPage}`) {
+        if (options.replace) {
+          history.replaceState(null, "", `#${nextPage}`);
+        } else {
+          history.pushState(null, "", `#${nextPage}`);
+        }
+      }
+
+      document.querySelector(selectors.pageRoot).focus({ preventScroll: true });
+
+      if (nextPage === "dashboard") {
+        loadDashboard();
+      }
+
+      if (nextPage === "users" && !state.users.loaded) {
+        loadUsers();
+      }
+
+      if (nextPage === "items" && !state.items.loaded) {
+        loadItems();
+      }
+
+      if (nextPage === "purchases" && !state.purchases.loaded) {
+        loadPurchases();
+      }
+
+      if (nextPage === "sales" && !state.sales.loaded) {
+        loadSales();
+      }
+
+      if (nextPage === "reports") {
+        loadReports(state.reports.currentType);
+      }
+
+      if (nextPage === "settings" && !state.settings.loaded) {
+        loadSettings();
+      }
+    }
+
+    function filterCurrentPage(query) {
+      const activePage = state.pages.get(state.currentPage).element;
+      const normalizedQuery = query.trim().toLowerCase();
+      const searchableRows = activePage.querySelectorAll("tbody tr");
+
+      if (!searchableRows.length) {
+        return;
+      }
+
+      searchableRows.forEach((row) => {
+        const rowText = row.textContent.toLowerCase();
+        row.hidden =
+          Boolean(normalizedQuery) && !rowText.includes(normalizedQuery);
+      });
+    }
+
+    function setUser(user) {
+      state.user = user || null;
+      if (!user) return;
+
+      const userNameEl = document.querySelector("#user-name");
+      const userRoleEl = document.querySelector("#user-role");
+      const userAvatarEl = document.querySelector("#user-avatar-text");
+
+      if (userNameEl)
+        userNameEl.textContent = user.name || user.email || "User";
+      if (userRoleEl) userRoleEl.textContent = user.role || "Staff";
+      if (userAvatarEl) {
+        const initial = (user.name || user.email || "U")
+          .charAt(0)
+          .toUpperCase();
+        userAvatarEl.textContent = initial;
+      }
+
+      applyRolePermissions(user.role);
+    }
+
+    function applyRolePermissions(role) {
+      const adminElements = document.querySelectorAll(
+        '[data-admin-only="true"]',
+      );
+      adminElements.forEach((el) => {
+        if (role === "Staff") {
+          el.classList.add("admin-hidden");
+        } else {
+          el.classList.remove("admin-hidden");
+        }
+      });
+
+      document.querySelectorAll("[data-report-type]").forEach((button) => {
+        const allowed = isReportTypeAllowedForRole(
+          button.dataset.reportType,
+          role,
+        );
+        button.hidden = !allowed;
+      });
+
+      if (!isReportTypeAllowedForRole(state.reports.currentType, role)) {
+        state.reports.currentType = getDefaultReportTypeForRole(role);
+        state.reports.loaded = false;
+      }
+    }
+
+    function showAuthOverlay() {
+      const page = document.querySelector("#login-page");
+      const appShell = document.querySelector("#app");
+      if (page) page.style.display = "flex";
+      if (appShell) appShell.style.display = "none";
+    }
+
+    function hideAuthOverlay() {
+      const page = document.querySelector("#login-page");
+      const appShell = document.querySelector("#app");
+      if (page) page.style.display = "none";
+      if (appShell) appShell.style.display = "flex";
+    }
+
+    function bindAuthEvents() {
+      const loginForm = document.querySelector("#main-login-form");
+      const loginError = document.querySelector("#main-login-error");
+      const logoutBtn = document.querySelector("#logout-btn");
+
+      if (loginForm) {
+        loginForm.addEventListener("submit", (e) => {
+          e.preventDefault();
+          loginError.style.display = "none";
+          const email = document
+            .querySelector("#main-login-email")
+            .value.trim();
+          const password = document.querySelector("#main-login-password").value;
+
+          showLoading(true);
+          serverCall("loginUser", email, password)
+            .then((res) => {
+              if (res && res.success && res.data) {
+                state.sessionToken = res.data.token;
+                storeSessionToken(res.data.token);
+                setUser(res.data.user);
+                hideAuthOverlay();
+                toast("Logged in successfully.", "success");
+                refreshCurrentPage();
+              } else {
+                loginError.textContent =
+                  (res && res.message) || "Login failed.";
+                loginError.style.display = "block";
+              }
+            })
+            .catch((err) => {
+              loginError.textContent = err.message || "Invalid credentials.";
+              loginError.style.display = "block";
+            })
+            .finally(() => showLoading(false));
+        });
+      }
+
+      if (logoutBtn) {
+        logoutBtn.addEventListener("click", () => {
+          if (state.sessionToken) {
+            serverCall("logoutUser", state.sessionToken).catch(() => {});
+          }
+          state.sessionToken = null;
+          state.user = null;
+          clearStoredSessionToken();
+          showAuthOverlay();
+          toast("Logged out.", "info");
+        });
+      }
+    }
+
+    function loadBootstrap() {
+      showLoading(true);
+
+      serverCall("getAppBootstrap", state.sessionToken)
+        .then((response) => {
+          const user = response && response.data ? response.data.user : null;
+          if (user) {
+            setUser(user);
+          }
+
+          if (state.sessionToken && user && user.isAuthenticated) {
+            hideAuthOverlay();
+            navigate(getInitialRoute(), { replace: true });
+          } else {
+            state.sessionToken = null;
+            state.user = null;
+            clearStoredSessionToken();
+            showAuthOverlay();
+          }
+
+          toast("Application ready.", "success");
+        })
+        .catch((error) => {
+          state.sessionToken = null;
+          state.user = null;
+          clearStoredSessionToken();
+          showAuthOverlay();
+          toast(
+            error.message || "Unable to load application details.",
+            "error",
+          );
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function refreshCurrentPage() {
+      if (state.currentPage === "dashboard") {
+        loadDashboard({ force: true });
+        return;
+      }
+
+      if (state.currentPage === "users") {
+        loadUsers({ force: true });
+        return;
+      }
+
+      if (state.currentPage === "items") {
+        loadItems({ force: true });
+        return;
+      }
+
+      if (state.currentPage === "purchases") {
+        loadPurchases({ force: true });
+        return;
+      }
+
+      if (state.currentPage === "sales") {
+        loadSales({ force: true });
+        return;
+      }
+
+      if (state.currentPage === "reports") {
+        loadReports(state.reports.currentType, { force: true });
+        return;
+      }
+
+      if (state.currentPage === "settings") {
+        loadSettings({ force: true });
+        return;
+      }
+
+      toast("Current page refreshed.", "success");
+    }
+
+    function bindUsersModule() {
+      const searchInput = document.querySelector(selectors.usersSearch);
+      const roleFilter = document.querySelector(selectors.usersRoleFilter);
+      const statusFilter = document.querySelector(selectors.usersStatusFilter);
+      const userForm = document.querySelector(selectors.userForm);
+
+      searchInput.addEventListener(
+        "input",
+        debounce((event) => {
+          state.users.query = event.target.value.trim().toLowerCase();
+          state.users.page = 1;
+          renderUsers();
+        }, 200),
+      );
+
+      roleFilter.addEventListener("change", (event) => {
+        state.users.role = event.target.value;
+        state.users.page = 1;
+        renderUsers();
+      });
+
+      statusFilter.addEventListener("change", (event) => {
+        state.users.status = event.target.value;
+        state.users.page = 1;
+        renderUsers();
+      });
+
+      document
+        .querySelector('[data-action="open-user-modal"]')
+        .addEventListener("click", () => {
+          openUserModal();
+        });
+
+      document.querySelectorAll("[data-user-modal-close]").forEach((button) => {
+        button.addEventListener("click", closeUserModal);
+      });
+
+      document
+        .querySelector(selectors.usersPrev)
+        .addEventListener("click", () => {
+          state.users.page = Math.max(state.users.page - 1, 1);
+          renderUsers();
+        });
+
+      document
+        .querySelector(selectors.usersNext)
+        .addEventListener("click", () => {
+          const totalPages = getUsersTotalPages();
+          state.users.page = Math.min(state.users.page + 1, totalPages);
+          renderUsers();
+        });
+
+      document
+        .querySelector(selectors.usersTableBody)
+        .addEventListener("click", handleUsersTableClick);
+
+      userForm.addEventListener("submit", handleUserFormSubmit);
+    }
+
+    function loadUsers(options = {}) {
+      if (state.users.loaded && !options.force) {
+        return;
+      }
+
+      showLoading(true);
+
+      serverCall("getUsers", state.sessionToken)
+        .then((response) => {
+          applyUsersData(response.data);
+          toast("Users loaded.", "success");
+        })
+        .catch((error) => {
+          toast(error.message || "Unable to load users.", "error");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function applyUsersData(data) {
+      const payload = data || {};
+      state.users.records = payload.users || [];
+      state.users.roles = payload.roles || ["Admin", "Staff"];
+      state.users.statuses = payload.statuses || ["Active", "Inactive"];
+      state.users.loaded = true;
+
+      hydrateUsersSelects();
+      renderUsers();
+    }
+
+    function hydrateUsersSelects() {
+      fillSelect(
+        document.querySelector(selectors.usersRoleFilter),
+        state.users.roles,
+        "All roles",
+      );
+      fillSelect(
+        document.querySelector(selectors.usersStatusFilter),
+        state.users.statuses,
+        "All statuses",
+      );
+      fillSelect(
+        document.querySelector(selectors.userRoleInput),
+        state.users.roles,
+      );
+      fillSelect(
+        document.querySelector(selectors.userStatusInput),
+        state.users.statuses,
+      );
+    }
+
+    function fillSelect(select, values, emptyLabel) {
+      const currentValue = select.value;
+      select.innerHTML = "";
+
+      if (emptyLabel) {
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = emptyLabel;
+        select.appendChild(emptyOption);
+      }
+
+      values.forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      });
+
+      if ([...select.options].some((option) => option.value === currentValue)) {
+        select.value = currentValue;
+      }
+    }
+
+    function renderUsers() {
+      const filteredUsers = getFilteredUsers();
+      const totalPages = getUsersTotalPages(filteredUsers);
+      state.users.page = Math.min(Math.max(state.users.page, 1), totalPages);
+
+      const start = (state.users.page - 1) * state.users.pageSize;
+      const pageRows = filteredUsers.slice(start, start + state.users.pageSize);
+      const tbody = document.querySelector(selectors.usersTableBody);
+      tbody.innerHTML = "";
+
+      if (!pageRows.length) {
+        tbody.appendChild(createEmptyRow(7, "No users found."));
+      } else {
+        pageRows.forEach((user) => tbody.appendChild(createUserRow(user)));
+      }
+
+      setText(
+        selectors.usersCount,
+        `${filteredUsers.length} ${filteredUsers.length === 1 ? "user" : "users"}`,
+      );
+      setText(
+        selectors.usersSummary,
+        getUsersPaginationSummary(filteredUsers.length, start, pageRows.length),
+      );
+
+      document.querySelector(selectors.usersPrev).disabled =
+        state.users.page <= 1;
+      document.querySelector(selectors.usersNext).disabled =
+        state.users.page >= totalPages;
+    }
+
+    function createUserRow(user) {
+      const tr = document.createElement("tr");
+      tr.dataset.userId = user.id;
+
+      appendCell(tr, user.id);
+      appendCell(tr, user.name);
+      appendCell(tr, user.email);
+      appendCell(tr, user.role);
+
+      const statusCell = document.createElement("td");
+      const badge = document.createElement("span");
+      badge.className = `status-badge ${user.status === "Active" ? "status-active" : "status-inactive"}`;
+      badge.textContent = user.status;
+      statusCell.appendChild(badge);
+      tr.appendChild(statusCell);
+
+      const userUpdateDate = user.updatedAt || user.createdAt;
+      appendCell(
+        tr,
+        userUpdateDate ? formatDate(userUpdateDate) : "Not updated",
+      );
+
+      const actionsCell = document.createElement("td");
+      actionsCell.className = "actions-cell";
+      actionsCell.appendChild(
+        createActionButton("Edit", "edit-user", user.id, "button-ghost"),
+      );
+      actionsCell.appendChild(
+        createActionButton("Delete", "delete-user", user.id, "button-danger"),
+      );
+      tr.appendChild(actionsCell);
+
+      return tr;
+    }
+
+    function createActionButton(
+      label,
+      action,
+      recordId,
+      variant,
+      dataAttr = "userId",
+    ) {
+      const button = document.createElement("button");
+      button.className = `button ${variant} button-small`;
+      button.type = "button";
+      button.dataset.action = action;
+      button.dataset[dataAttr] = recordId;
+      button.textContent = label;
+      return button;
+    }
+
+    function getFilteredUsers() {
+      return state.users.records.filter((user) => {
+        const text =
+          `${user.id} ${user.name} ${user.email} ${user.role} ${user.status}`.toLowerCase();
+        const matchesQuery =
+          !state.users.query || text.includes(state.users.query);
+        const matchesRole = !state.users.role || user.role === state.users.role;
+        const matchesStatus =
+          !state.users.status || user.status === state.users.status;
+        return matchesQuery && matchesRole && matchesStatus;
+      });
+    }
+
+    function getUsersTotalPages(filteredUsers = getFilteredUsers()) {
+      return Math.max(
+        Math.ceil(filteredUsers.length / state.users.pageSize),
+        1,
+      );
+    }
+
+    function getUsersPaginationSummary(total, start, count) {
+      if (!total) {
+        return "Showing 0 users";
+      }
+
+      return `Showing ${start + 1}-${start + count} of ${total} users`;
+    }
+
+    function handleUsersTableClick(event) {
+      const button = event.target.closest("button[data-action]");
+
+      if (!button) {
+        return;
+      }
+
+      const userId = button.dataset.userId;
+
+      if (button.dataset.action === "edit-user") {
+        const user = state.users.records.find((record) => record.id === userId);
+        openUserModal(user);
+      }
+
+      if (button.dataset.action === "delete-user") {
+        deleteUserRecord(userId);
+      }
+    }
+
+    function openUserModal(user = null) {
+      const modal = document.querySelector(selectors.userModal);
+      const form = document.querySelector(selectors.userForm);
+      form.reset();
+      setText(selectors.userFormError, "");
+
+      document.querySelector(selectors.userModalTitle).textContent = user
+        ? "Edit User"
+        : "New User";
+      document.querySelector(selectors.userIdInput).value = user ? user.id : "";
+      document.querySelector(selectors.userNameInput).value = user
+        ? user.name
+        : "";
+      document.querySelector(selectors.userEmailInput).value = user
+        ? user.email
+        : "";
+      document.querySelector(selectors.userRoleInput).value = user
+        ? user.role
+        : "Staff";
+      document.querySelector(selectors.userStatusInput).value = user
+        ? user.status
+        : "Active";
+
+      const passwordInput = document.querySelector(selectors.userPasswordInput);
+      const passwordHelp = document.querySelector(selectors.userPasswordHelp);
+      if (passwordInput) {
+        passwordInput.value = "";
+        if (user) {
+          passwordInput.required = false;
+          if (passwordHelp) {
+            passwordHelp.textContent = "(Leave blank to keep current)";
+          }
+        } else {
+          passwordInput.required = true;
+          if (passwordHelp) {
+            passwordHelp.textContent = "(Minimum 6 characters)";
+          }
+        }
+      }
+
+      modal.classList.add("active");
+      modal.setAttribute("aria-hidden", "false");
+      document.querySelector(selectors.userNameInput).focus();
+    }
+
+    function closeUserModal() {
+      const modal = document.querySelector(selectors.userModal);
+      modal.classList.remove("active");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    function handleUserFormSubmit(event) {
+      event.preventDefault();
+
+      const form = event.currentTarget;
+      const userId = document.querySelector(selectors.userIdInput).value;
+      const payload = {
+        name: form.elements.name.value,
+        email: form.elements.email.value,
+        role: form.elements.role.value,
+        status: form.elements.status.value,
+        password: form.elements.password.value,
+      };
+
+      if (!validateUserForm(payload)) {
+        return;
+      }
+
+      showLoading(true);
+      serverCall(
+        userId ? "updateUser" : "createUser",
+        ...(userId
+          ? [userId, payload, state.sessionToken]
+          : [payload, state.sessionToken]),
+      )
+        .then((response) => {
+          applyUsersData(response.data);
+          closeUserModal();
+          toast(userId ? "User updated." : "User created.", "success");
+        })
+        .catch((error) => {
+          setText(
+            selectors.userFormError,
+            error.message || "Unable to save user.",
+          );
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function validateUserForm(payload) {
+      const name = payload.name.trim();
+      const email = payload.email.trim();
+      const password = payload.password;
+      const isNewUser = !document.querySelector(selectors.userIdInput).value;
+      let message = "";
+
+      if (name.length < 2) {
+        message = "Name must be at least 2 characters.";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        message = "Enter a valid email address.";
+      } else if (isNewUser && (!password || password.length < 6)) {
+        message = "Password must be at least 6 characters.";
+      } else if (password && password.length > 0 && password.length < 6) {
+        message = "Password must be at least 6 characters.";
+      } else if (!payload.role) {
+        message = "Select a role.";
+      } else if (!payload.status) {
+        message = "Select a status.";
+      }
+
+      setText(selectors.userFormError, message);
+      return !message;
+    }
+
+    function deleteUserRecord(userId) {
+      confirm("Delete this user? This action cannot be undone.").then(
+        (confirmed) => {
+          if (!confirmed) {
+            return;
+          }
+
+          showLoading(true);
+          serverCall("deleteUser", userId, state.sessionToken)
+            .then((response) => {
+              applyUsersData(response.data);
+              toast("User deleted.", "success");
+            })
+            .catch((error) => {
+              toast(error.message || "Unable to delete user.", "error");
+            })
+            .finally(() => showLoading(false));
+        },
+      );
+    }
+
+    function getLocalUsersResponse() {
+      return {
+        success: true,
+        data: {
+          users: [
+            {
+              id: "USR-DEMO001",
+              name: "Demo Admin",
+              email: "admin@example.com",
+              role: "Admin",
+              status: "Active",
+              createdAt: "2026-07-03 09:00:00",
+              updatedAt: "2026-07-03 09:00:00",
+            },
+            {
+              id: "USR-DEMO002",
+              name: "Sales Staff",
+              email: "sales@example.com",
+              role: "Staff",
+              status: "Inactive",
+              createdAt: "2026-07-03 09:10:00",
+              updatedAt: "2026-07-03 09:10:00",
+            },
+          ],
+          roles: ["Admin", "Staff"],
+          statuses: ["Active", "Inactive"],
+        },
+      };
+    }
+
+    function loadDashboard(options = {}) {
+      if (state.dashboardLoaded && !options.force) {
+        renderDashboard(state.dashboardData || {});
+        return;
+      }
+
+      state.dashboardLoaded = false;
+      showLoading(true);
+
+      serverCall("getDashboardOverview", state.sessionToken)
+        .then((response) => {
+          state.dashboardData = (response && response.data) || {};
+          state.dashboardLoaded = true;
+          renderDashboard(state.dashboardData);
+          toast("Dashboard updated.", "success");
+        })
+        .catch((error) => {
+          // On error, render with empty data so the UI shows "No data" states
+          // instead of being stuck with "Loading..." or stale data
+          state.dashboardData = {};
+          state.dashboardLoaded = true;
+          renderDashboard(state.dashboardData);
+          toast(
+            error && error.message
+              ? error.message
+              : "Unable to load dashboard.",
+            "error",
+          );
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function renderDashboard(data) {
+      const dashboard = data || {};
+      const kpis = dashboard.kpis || {};
+
+      setText(
+        '[data-kpi="totalItems"]',
+        formatters.number.format(kpis.totalItems || 0),
+      );
+      setText(
+        '[data-kpi="totalSales"]',
+        formatters.currency.format(kpis.totalSales || 0),
+      );
+      setText(
+        '[data-kpi="totalPurchases"]',
+        formatters.currency.format(kpis.totalPurchases || 0),
+      );
+      setText(
+        '[data-kpi="lowStockItems"]',
+        formatters.number.format(kpis.lowStockItems || 0),
+      );
+
+      renderTransactionRows(
+        selectors.dashboardRecentSales,
+        dashboard.recentSales || [],
+        {
+          empty: "No sales recorded yet.",
+          idFallback: "Draft sale",
+        },
+      );
+
+      renderTransactionRows(
+        selectors.dashboardRecentPurchases,
+        dashboard.recentPurchases || [],
+        {
+          empty: "No purchases recorded yet.",
+          idFallback: "Draft purchase",
+        },
+      );
+
+      renderLowStockRows(dashboard.lowStockItems || []);
+      renderExpiringBatchesRows(dashboard.expiringBatches || []);
+      renderDashboardChart(dashboard.chartSummary || {});
+
+      const generatedAt = dashboard.generatedAt
+        ? new Date(dashboard.generatedAt)
+        : new Date();
+      setText(
+        selectors.dashboardUpdatedAt,
+        `Updated ${formatters.dateTime.format(generatedAt)}`,
+      );
+    }
+
+    function renderTransactionRows(selector, rows, options) {
+      const tbody = document.querySelector(selector);
+      tbody.innerHTML = "";
+
+      if (!rows.length) {
+        tbody.appendChild(createEmptyRow(4, options.empty));
+        return;
+      }
+
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        appendCell(tr, row.id || options.idFallback);
+        appendCell(tr, row.partyName || "Walk-in");
+        appendCell(tr, formatDate(row.date));
+        appendCell(
+          tr,
+          formatters.currency.format(row.totalAmount || 0),
+          "numeric-cell",
+        );
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderLowStockRows(rows) {
+      const tbody = document.querySelector(selectors.dashboardLowStock);
+      if (!tbody) {
+        return;
+      }
+      tbody.innerHTML = "";
+
+      if (!rows.length) {
+        tbody.appendChild(createEmptyRow(5, "No low-stock items found."));
+        return;
+      }
+
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        appendCell(tr, row.name || row.itemId || "Unnamed item");
+        appendCell(tr, row.category || "Uncategorized");
+        const stockClass =
+          row.currentStock === 0
+            ? "numeric-cell dash-stock-critical"
+            : "numeric-cell dash-stock-warning";
+        appendCell(
+          tr,
+          `${formatters.number.format(row.currentStock || 0)}${row.unit ? " " + row.unit : ""}`,
+          stockClass,
+        );
+        appendCell(
+          tr,
+          formatters.number.format(row.minimumStock || 0),
+          "numeric-cell",
+        );
+        appendCell(
+          tr,
+          formatters.number.format(row.shortage || 0),
+          "numeric-cell dash-stock-critical",
+        );
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderExpiringBatchesRows(rows) {
+      const tbody = document.getElementById("dashboard-expiring-tbody");
+
+      if (!tbody) {
+        return;
+      }
+
+      tbody.innerHTML = "";
+
+      if (!rows || !rows.length) {
+        tbody.appendChild(createEmptyRow(5, "No expiring batches found."));
+        return;
+      }
+
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+
+        const itemName = row.itemName || row.itemId || "Unknown";
+        const batchNumber = row.batchNumber || "-";
+        const remaining = row.remainingQuantity ?? row.remaining ?? 0;
+
+        const expDate = row.expiryDate ? new Date(row.expiryDate) : null;
+        const daysToExpiry = row.daysToExpiry;
+
+        appendCell(tr, itemName);
+        appendCell(tr, batchNumber);
+        appendCell(tr, remaining);
+
+        if (expDate && !Number.isNaN(expDate.getTime())) {
+          appendCell(tr, formatters.date.format(expDate));
+        } else {
+          appendCell(tr, "-");
+        }
+
+        const statusBadge = document.createElement("span");
+        statusBadge.className = "status-badge";
+
+        if (typeof daysToExpiry === "number") {
+          if (daysToExpiry < 0) {
+            statusBadge.classList.add("status-danger");
+            statusBadge.textContent = `Expired (${typeof daysToExpiry === "number" ? Math.abs(daysToExpiry) : 0}d)`;
+          } else if (daysToExpiry <= 30) {
+            statusBadge.classList.add("status-warning");
+            statusBadge.textContent = `Expiring (${daysToExpiry}d)`;
+          } else {
+            statusBadge.classList.add("status-active");
+            statusBadge.textContent = `${daysToExpiry}d`;
+          }
+        } else {
+          statusBadge.classList.add("status-active");
+          statusBadge.textContent = "Pending";
+        }
+
+        const statusTd = document.createElement("td");
+        statusTd.appendChild(statusBadge);
+        tr.appendChild(statusTd);
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderDashboardChart(summary) {
+      const salesCount = summary.salesCount || 0;
+
+      const purchasesCount = summary.purchasesCount || 0;
+      const maxCount = Math.max(salesCount, purchasesCount, 1);
+
+      document.querySelector(selectors.dashboardSalesBar).style.width =
+        `${Math.max((salesCount / maxCount) * 100, salesCount ? 8 : 0)}%`;
+      document.querySelector(selectors.dashboardPurchasesBar).style.width =
+        `${Math.max((purchasesCount / maxCount) * 100, purchasesCount ? 8 : 0)}%`;
+      setText(
+        selectors.dashboardSalesCount,
+        formatters.number.format(salesCount),
+      );
+      setText(
+        selectors.dashboardPurchasesCount,
+        formatters.number.format(purchasesCount),
+      );
+      setText(
+        selectors.dashboardChartSalesTotal,
+        formatters.currency.format(summary.salesTotal || 0),
+      );
+      setText(
+        selectors.dashboardChartPurchasesTotal,
+        formatters.currency.format(summary.purchasesTotal || 0),
+      );
+    }
+
+    function createEmptyRow(colspan, message) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = colspan;
+      td.className = "table-empty";
+      td.textContent = message;
+      tr.appendChild(td);
+      return tr;
+    }
+
+    function appendCell(row, value, className) {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+
+      if (className) {
+        cell.className = className;
+      }
+
+      row.appendChild(cell);
+    }
+
+    function parseDateSafe_(value) {
+      if (!value) return null;
+      if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+      const str = String(value).trim();
+      if (!str || str === "-" || str === "Not updated" || str === "No date") {
+        return null;
+      }
+
+      // Handle YYYY-MM-DD format in local timezone to avoid UTC day shift
+      const dateOnly = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (dateOnly) {
+        return new Date(
+          Number(dateOnly[1]),
+          Number(dateOnly[2]) - 1,
+          Number(dateOnly[3]),
+        );
+      }
+
+      // Handle ISO strings or YYYY-MM-DD HH:mm:ss format
+      const normalized = str.replace(" ", "T");
+      const d = new Date(normalized);
+      if (!isNaN(d.getTime())) return d;
+
+      const fallback = new Date(str);
+      return isNaN(fallback.getTime()) ? null : fallback;
+    }
+
+    function formatDate(value) {
+      if (!value || value === "-" || value === "Not updated" || value === "No date") {
+        return "-";
+      }
+      const date = parseDateSafe_(value);
+      return !date ? "-" : formatters.date.format(date);
+    }
+
+    function setText(selector, value) {
+      const element = document.querySelector(selector);
+
+      if (element) {
+        element.textContent = value;
+      }
+    }
+
+    function setUser(user) {
+      state.user = user || null;
+      const name = user && user.name ? user.name : "Guest User";
+      const role = user && user.role ? user.role : "Staff";
+      const initial = name.slice(0, 1).toUpperCase();
+
+      document.querySelector(selectors.userName).textContent = name;
+      document.querySelector(selectors.userRole).textContent = role;
+      document.querySelector(selectors.userAvatar).textContent = initial;
+      applyRolePermissions(role);
+    }
+
+    function serverCall(functionName, ...args) {
+      return new Promise((resolve, reject) => {
+        if (!window.google || !google.script || !google.script.run) {
+          resolve(getLocalPreviewResponse(functionName, ...args));
+          return;
+        }
+
+        const runner = google.script.run
+          .withSuccessHandler((response) => {
+            if (response && response.success === false) {
+              reject(new Error(response.message));
+              return;
+            }
+            resolve(response);
+          })
+          .withFailureHandler((error) => reject(error));
+
+        // GAS uses a Proxy object - typeof check fails on it.
+        // Call the function directly; GAS will throw if it doesn't exist.
+        try {
+          if (args.length === 0) {
+            runner[functionName]();
+          } else if (args.length === 1) {
+            runner[functionName](args[0]);
+          } else if (args.length === 2) {
+            runner[functionName](args[0], args[1]);
+          } else if (args.length === 3) {
+            runner[functionName](args[0], args[1], args[2]);
+          } else {
+            runner[functionName].apply(runner, args);
+          }
+        } catch (e) {
+          reject(
+            new Error(`Server function "${functionName}" is not available.`),
+          );
+        }
+      });
+    }
+
+    function getLocalPreviewResponse(functionName, ...args) {
+      if (functionName === "getUsers") {
+        return {
+          success: true,
+          data: {
+            users: [
+              {
+                id: "USR-001",
+                name: "Demo User",
+                email: "demo@example.com",
+                role: "Admin",
+                status: "Active",
+                createdAt: "2026-07-01",
+                updatedAt: "2026-07-01",
+              },
+            ],
+            roles: ["Admin", "Staff"],
+            statuses: ["Active", "Inactive"],
+          },
+        };
+      }
+      if (functionName === "getItems") {
+        return {
+          success: true,
+          data: {
+            items: [
+              {
+                id: "ITM-001",
+                name: "Panadol",
+                category: "Tablet",
+                currentStock: 10,
+                minimumStock: 5,
+                costPrice: 10,
+                sellingPrice: 15,
+              },
+            ],
+            categories: ["Tablet"],
+            units: ["Box"],
+          },
+        };
+      }
+      if (functionName === "getPurchases") {
+        return {
+          success: true,
+          data: {
+            purchases: [
+              {
+                id: "PUR-001",
+                itemId: "ITM-001",
+                quantity: 10,
+                unitPrice: 10,
+                totalCost: 100,
+                supplier: "Vendor",
+                purchaseDate: "2026-07-01",
+                status: "Completed",
+              },
+            ],
+            items: [
+              {
+                id: "ITM-001",
+                name: "Panadol",
+                category: "Tablet",
+                currentStock: 10,
+                minimumStock: 5,
+                costPrice: 10,
+                sellingPrice: 15,
+              },
+            ],
+            suppliers: ["Vendor"],
+          },
+        };
+      }
+      if (functionName === "getSales") {
+        return {
+          success: true,
+          data: {
+            sales: [
+              {
+                id: "SAL-001",
+                invoiceNumber: "INV-001",
+                customerName: "Customer A",
+                customerPhone: "0300-1234567",
+                saleDate: "2026-07-02",
+                paymentMethod: "Cash",
+                status: "Completed",
+                notes: "",
+                totalAmount: 30,
+                itemCount: 1,
+                items: [
+                  {
+                    id: "SLI-001",
+                    saleId: "SAL-001",
+                    itemId: "ITM-001",
+                    quantity: 2,
+                    unitPrice: 15,
+                    totalPrice: 30,
+                  },
+                ],
+                createdBy: "System",
+                createdAt: "2026-07-02 10:00:00",
+                updatedAt: "2026-07-02 10:00:00",
+              },
+            ],
+            items: [
+              {
+                id: "ITM-001",
+                name: "Panadol",
+                category: "Tablet",
+                currentStock: 10,
+                minimumStock: 5,
+                costPrice: 10,
+                sellingPrice: 15,
+              },
+            ],
+            customers: ["Customer A"],
+          },
+        };
+      }
+      if (
+        functionName === "getSaleInvoice" ||
+        functionName === "printSaleInvoice"
+      ) {
+        const saleId = args[0] || "SAL-001";
+        const sale = {
+          id: saleId,
+          invoiceNumber: "INV-001",
+          customerName: "Customer A",
+          customerPhone: "0300-1234567",
+          saleDate: "2026-07-02",
+          paymentMethod: "Cash",
+          status: "Completed",
+          notes: "",
+          totalAmount: 30,
+          itemCount: 1,
+          items: [
+            {
+              id: "SLI-001",
+              saleId: saleId,
+              itemId: "ITM-001",
+              quantity: 2,
+              unitPrice: 15,
+              totalPrice: 30,
+            },
+          ],
+          createdBy: "System",
+          createdAt: "2026-07-02 10:00:00",
+          updatedAt: "2026-07-02 10:00:00",
+        };
+
+        const item = { id: "ITM-001", name: "Panadol", sellingPrice: 15 };
+        const itemsHtml = (sale.items || [])
+          .map(
+            (li) =>
+              `<tr><td>${item.name || li.itemId}</td><td>${li.quantity}</td><td>${formatters.currency.format(li.unitPrice)}</td><td>${formatters.currency.format(li.totalPrice)}</td></tr>`,
+          )
+          .join("");
+
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Invoice ${sale.invoiceNumber}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+    .invoice-header { text-align: center; margin-bottom: 24px; }
+    .invoice-header h1 { margin: 0; font-size: 22px; }
+    .invoice-meta { margin-bottom: 16px; }
+    .invoice-meta p { margin: 4px 0; font-size: 13px; color: #6b7280; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 13px; }
+    th { background: #f3f4f6; }
+    .total-row { font-weight: bold; }
+    .footer { text-align: center; font-size: 12px; color: #9ca3af; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <div class="invoice-header">
+    <h1>INVOICE</h1>
+    <p>${sale.invoiceNumber || sale.id}</p>
+  </div>
+  <div class="invoice-meta">
+    <p><strong>Customer:</strong> ${sale.customerName || "Walk-in"}</p>
+    <p><strong>Phone:</strong> ${sale.customerPhone || "-"}</p>
+    <p><strong>Date:</strong> ${sale.saleDate || "-"}</p>
+    <p><strong>Payment:</strong> ${sale.paymentMethod || "Cash"}</p>
+  </div>
+  <table>
+    <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+    <tbody>${itemsHtml}</tbody>
+  </table>
+  <p><strong>Total Amount: ${formatters.currency.format(sale.totalAmount || 0)}</strong></p>
+  <div class="footer">
+    <p>Thank you for your business!</p>
+    <p>Generated by Inventory Management System</p>
+  </div>
+</body>
+</html>`;
+
+        return {
+          success: true,
+          data: { html: html },
+        };
+      }
+
+      if (functionName === "getDashboardOverview") {
+        return {
+          success: true,
+          data: {
+            generatedAt: new Date().toISOString(),
+            kpis: {
+              totalItems: 24,
+              totalSales: 154300,
+              totalPurchases: 98500,
+              lowStockItems: 3,
+            },
+            recentSales: [
+              {
+                id: "INV-1001",
+                date: new Date().toISOString(),
+                partyName: "Ahmed Traders",
+                totalAmount: 15300,
+                status: "Completed",
+              },
+              {
+                id: "INV-1002",
+                date: new Date(Date.now() - 86400000).toISOString(),
+                partyName: "Khan Medical",
+                totalAmount: 8750,
+                status: "Completed",
+              },
+            ],
+            recentPurchases: [
+              {
+                id: "PUR-0001",
+                date: new Date().toISOString(),
+                partyName: "Pharma Distributor",
+                totalAmount: 49200,
+                status: "Completed",
+              },
+              {
+                id: "PUR-0002",
+                date: new Date(Date.now() - 172800000).toISOString(),
+                partyName: "Local Vendor",
+                totalAmount: 12300,
+                status: "Completed",
+              },
+            ],
+            lowStockItems: [
+              {
+                itemId: "ITM-001",
+                name: "Panadol Tablet",
+                category: "Tablet",
+                unit: "Box",
+                currentStock: 3,
+                minimumStock: 10,
+              },
+              {
+                itemId: "ITM-002",
+                name: "Augmentin 625",
+                category: "Capsule",
+                unit: "Pack",
+                currentStock: 1,
+                minimumStock: 5,
+              },
+              {
+                itemId: "ITM-003",
+                name: "Eye Drops",
+                category: "Eye Drops",
+                unit: "Bottle",
+                currentStock: 2,
+                minimumStock: 8,
+              },
+            ],
+            expiringBatches: [
+              {
+                batchNumber: "BATCH-A1B2C3",
+                itemId: "ITM-001",
+                itemName: "Panadol Tablet",
+                remainingQuantity: 50,
+                expiryDate: new Date(Date.now() + 45 * 86400000).toISOString(),
+                daysToExpiry: 45,
+              },
+              {
+                batchNumber: "BATCH-D4E5F6",
+                itemId: "ITM-002",
+                itemName: "Augmentin 625",
+                remainingQuantity: 30,
+                expiryDate: new Date(Date.now() + 15 * 86400000).toISOString(),
+                daysToExpiry: 15,
+              },
+              {
+                batchNumber: "BATCH-G7H8I9",
+                itemId: "ITM-001",
+                itemName: "Panadol Tablet",
+                remainingQuantity: 20,
+                expiryDate: new Date(Date.now() - 5 * 86400000).toISOString(),
+                daysToExpiry: -5,
+              },
+            ],
+            chartSummary: {
+              salesCount: 18,
+              purchasesCount: 7,
+              salesTotal: 154300,
+              purchasesTotal: 98500,
+            },
+          },
+        };
+      }
+
+      if (functionName === "getReportsPageMeta") {
+        return {
+          success: true,
+          data: {
+            module: "Reports",
+            supportedExports: ["pdf", "excel"],
+            reportTypes: ["sales", "purchases", "inventory", "lowstock"],
+            defaultPageSize: 10,
+          },
+        };
+      }
+
+      if (functionName === "getReportsData") {
+        const reportType = args[0] || "sales";
+        const filters = args[1] || {};
+        const isInventory = reportType === "inventory";
+        const isPurchases = reportType === "purchases";
+        const isLowStock = reportType === "lowstock";
+
+        return {
+          success: true,
+          data: {
+            reportType,
+            title: isInventory
+              ? "Inventory Report"
+              : isPurchases
+                ? "Purchase Report"
+                : isLowStock
+                  ? "Low Stock Report"
+                  : "Sales Report",
+            summaryLabel: isInventory
+              ? "Total Stock Value"
+              : isPurchases
+                ? "Total Purchases"
+                : isLowStock
+                  ? "Low Stock Items"
+                  : "Total Sales",
+            summaryValue: isInventory
+              ? "$2,450.00"
+              : isPurchases
+                ? "$980.00"
+                : isLowStock
+                  ? 2
+                  : "$1,530.00",
+            summaryValueDisplay: isInventory
+              ? "$2,450.00"
+              : isPurchases
+                ? "$980.00"
+                : isLowStock
+                  ? "2"
+                  : "$1,530.00",
+            columns: isInventory
+              ? [
+                  "ID",
+                  "Item",
+                  "Category",
+                  "Current Stock",
+                  "Minimum Stock",
+                  "Cost Price",
+                  "Selling Price",
+                ]
+              : isPurchases
+                ? [
+                    "ID",
+                    "Item",
+                    "Supplier",
+                    "Quantity",
+                    "Unit Price",
+                    "Total Cost",
+                    "Date",
+                  ]
+                : isLowStock
+                  ? [
+                      "ID",
+                      "Item",
+                      "Category",
+                      "Current Stock",
+                      "Minimum Stock",
+                      "Shortage",
+                    ]
+                  : [
+                      "ID",
+                      "Invoice",
+                      "Item",
+                      "Customer",
+                      "Quantity",
+                      "Total Price",
+                      "Date",
+                    ],
+            rows: isInventory
+              ? [["ITM-0001", "Desk Lamp", "Office", 8, 5, "$20.00", "$35.00"]]
+              : isPurchases
+                ? [
+                    [
+                      "PUR-0001",
+                      "Desk Lamp",
+                      "North Supply",
+                      4,
+                      "$20.00",
+                      "$80.00",
+                      filters.dateFrom || "2026-07-01",
+                    ],
+                  ]
+                : isLowStock
+                  ? [["ITM-0001", "Desk Lamp", "Office", 2, 5, 3]]
+                  : [
+                      [
+                        "SAL-0001",
+                        "INV-001",
+                        "Desk Lamp",
+                        "Sample Customer",
+                        2,
+                        "$70.00",
+                        filters.dateFrom || "2026-07-02",
+                      ],
+                    ],
+            totalRecords: 1,
+            generatedAt: new Date().toISOString(),
+            filters,
+          },
+        };
+      }
+
+      if (functionName === "exportReport") {
+        const format = String(args[1] || "pdf").toLowerCase();
+        const extension = format === "excel" ? "xlsx" : "pdf";
+        const mimeType =
+          format === "excel"
+            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            : "application/pdf";
+
+        return {
+          success: true,
+          data: {
+            fileName: `Sales_Report_preview.${extension}`,
+            mimeType,
+            contentBase64: btoa("Preview export file"),
+            downloadMethod: "base64",
+          },
+        };
+      }
+
+      if (functionName === "getSettings") {
+        return {
+          success: true,
+          data: {
+            companyName: "My Company",
+            companyEmail: "info@company.pk",
+            companyPhone: "+92 300 0000000",
+            companyAddress: "Lahore, Punjab, Pakistan",
+            logoUrl: "",
+            currency: "PKR",
+            currencySymbol: "\u20A8",
+            taxLabel: "GST",
+            taxRate: "17",
+            invoicePrefix: "INV-",
+            invoiceNextNo: "1001",
+            timezone: "Asia/Karachi",
+            dateFormat: "dd/MM/yyyy",
+            lowStockAlert: "true",
+            darkMode: "false",
+            language: "en",
+          },
+        };
+      }
+
+      if (functionName === "saveSettings" || functionName === "resetSettings") {
+        const payload = args[0] || {};
+        return {
+          success: true,
+          data: Object.assign(
+            {
+              companyName: "My Company",
+              companyEmail: "",
+              companyPhone: "",
+              companyAddress: "",
+              logoUrl: "",
+              currency: "PKR",
+              currencySymbol: "\u20A8",
+              taxLabel: "GST",
+              taxRate: "0",
+              invoicePrefix: "INV-",
+              invoiceNextNo: "1001",
+              timezone: "Asia/Karachi",
+              dateFormat: "dd/MM/yyyy",
+              lowStockAlert: "true",
+              darkMode: "false",
+              language: "en",
+            },
+            payload,
+          ),
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          user: {
+            name: "Local Preview",
+            role: "Admin",
+          },
+        },
+      };
+    }
+
+    function showLoading(isVisible) {
+      const overlay = document.querySelector(selectors.loadingOverlay);
+      overlay.classList.toggle("active", isVisible);
+      overlay.setAttribute("aria-hidden", String(!isVisible));
+    }
+
+    function toast(message, type = "info", timeout = 3200) {
+      const region = document.querySelector(selectors.toastRegion);
+      const toastElement = document.createElement("div");
+      toastElement.className = `toast ${type}`;
+      toastElement.textContent = message;
+      region.appendChild(toastElement);
+
+      window.setTimeout(() => {
+        toastElement.remove();
+      }, timeout);
+    }
+
+    function confirm(message) {
+      const dialog = document.querySelector(selectors.confirmDialog);
+      document.querySelector(selectors.confirmMessage).textContent =
+        message || "Are you sure you want to continue?";
+      dialog.classList.add("active");
+      dialog.setAttribute("aria-hidden", "false");
+
+      return new Promise((resolve) => {
+        state.confirmResolver = resolve;
+      });
+    }
+
+    function bindConfirmDialog() {
+      document.querySelectorAll("[data-confirm-cancel]").forEach((button) => {
+        button.addEventListener("click", () => closeConfirm(false));
+      });
+
+      document
+        .querySelector("[data-confirm-ok]")
+        .addEventListener("click", () => closeConfirm(true));
+    }
+
+    function closeConfirm(result) {
+      const dialog = document.querySelector(selectors.confirmDialog);
+      dialog.classList.remove("active");
+      dialog.setAttribute("aria-hidden", "true");
+
+      if (state.confirmResolver) {
+        state.confirmResolver(result);
+        state.confirmResolver = null;
+      }
+    }
+
+    function toggleSidebar() {
+      const app = document.querySelector(selectors.app);
+      const isOpen = app.dataset.sidebarOpen === "true";
+      app.dataset.sidebarOpen = String(!isOpen);
+    }
+
+    function closeSidebar() {
+      document.querySelector(selectors.app).dataset.sidebarOpen = "false";
+    }
+
+    function bindItemsModule() {
+      const searchInput = document.querySelector(selectors.itemsSearch);
+      const categoryFilter = document.querySelector(
+        selectors.itemsCategoryFilter,
+      );
+      const stockFilter = document.querySelector(selectors.itemsStockFilter);
+      const expiryFilter = document.querySelector(selectors.itemsExpiryFilter);
+      const itemForm = document.querySelector(selectors.itemForm);
+
+      // Optional elements (may be removed from items.html)
+      if (stockFilter) {
+        stockFilter.addEventListener("change", (event) => {
+          state.items.stockFilter = event.target.value;
+          state.items.page = 1;
+          renderItems();
+        });
+      }
+
+      if (expiryFilter) {
+        expiryFilter.addEventListener("change", (event) => {
+          state.items.expiryFilter = event.target.value;
+          state.items.page = 1;
+          renderItems();
+        });
+      }
+
+      searchInput.addEventListener(
+        "input",
+        debounce((event) => {
+          state.items.query = event.target.value.trim().toLowerCase();
+          state.items.page = 1;
+          renderItems();
+        }, 200),
+      );
+
+      categoryFilter.addEventListener("change", (event) => {
+        state.items.category = event.target.value;
+        state.items.page = 1;
+        renderItems();
+      });
+
+      document
+        .querySelector('[data-action="open-item-modal"]')
+        .addEventListener("click", () => {
+          openItemModal();
+        });
+
+      document.querySelectorAll("[data-item-modal-close]").forEach((button) => {
+        button.addEventListener("click", closeItemModal);
+      });
+
+      document
+        .querySelector(selectors.itemsPrev)
+        .addEventListener("click", () => {
+          state.items.page = Math.max(state.items.page - 1, 1);
+          renderItems();
+        });
+
+      document
+        .querySelector(selectors.itemsNext)
+        .addEventListener("click", () => {
+          const totalPages = getItemsTotalPages();
+          state.items.page = Math.min(state.items.page + 1, totalPages);
+          renderItems();
+        });
+
+      document
+        .querySelector(selectors.itemsTableBody)
+        .addEventListener("click", handleItemsTableClick);
+
+      itemForm.addEventListener("submit", handleItemFormSubmit);
+    }
+
+    function loadItems(options = {}) {
+      if (state.items.loaded && !options.force) {
+        return;
+      }
+
+      showLoading(true);
+
+      serverCall("getItems", state.sessionToken)
+        .then((response) => {
+          applyItemsData(response.data);
+          toast("Items loaded.", "success");
+        })
+        .catch((error) => {
+          toast(error.message || "Unable to load items.", "error");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function applyItemsData(data) {
+      const payload = data || {};
+      state.items.records = payload.items || [];
+      state.items.categories = payload.categories || [];
+      state.items.units = payload.units || [];
+      state.items.loaded = true;
+
+      state.dashboardLoaded = false;
+      state.reports.loaded = false;
+      state.inventory.loaded = false;
+
+      hydrateItemsSelects();
+      renderItems();
+    }
+
+    function hydrateItemsSelects() {
+      fillSelect(
+        document.querySelector(selectors.itemsCategoryFilter),
+        state.items.categories,
+        "All categories",
+      );
+      fillSelect(
+        document.querySelector(selectors.itemCategoryInput),
+        state.items.categories,
+      );
+      fillSelect(
+        document.querySelector(selectors.itemUnitInput),
+        state.items.units,
+      );
+    }
+
+    function renderItems() {
+      const filteredItems = getFilteredItems();
+      const totalPages = getItemsTotalPages(filteredItems);
+      state.items.page = Math.min(Math.max(state.items.page, 1), totalPages);
+
+      const start = (state.items.page - 1) * state.items.pageSize;
+      const pageRows = filteredItems.slice(start, start + state.items.pageSize);
+      const tbody = document.querySelector(selectors.itemsTableBody);
+      tbody.innerHTML = "";
+
+      if (!pageRows.length) {
+        tbody.appendChild(createEmptyRow(9, "No items found."));
+      } else {
+        pageRows.forEach((item) => tbody.appendChild(createItemRow(item)));
+      }
+
+      setText(
+        selectors.itemsCount,
+        `${filteredItems.length} ${filteredItems.length === 1 ? "item" : "items"}`,
+      );
+      setText(
+        selectors.itemsSummary,
+        getItemsPaginationSummary(filteredItems.length, start, pageRows.length),
+      );
+
+      const paginationDiv = document.querySelector(selectors.itemsPagination);
+      paginationDiv.style.display = totalPages > 1 ? "flex" : "none";
+
+      document.querySelector(selectors.itemsPrev).disabled =
+        state.items.page <= 1;
+      document.querySelector(selectors.itemsNext).disabled =
+        state.items.page >= totalPages;
+    }
+
+    function createItemRow(item) {
+      const tr = document.createElement("tr");
+      tr.dataset.itemId = item.id;
+
+      // Match items.html columns:
+      // Name | Category | Quantity | Manufacturer | Location | Status | Actions
+      appendCell(tr, item.name);
+      appendCell(tr, item.category);
+      appendCell(tr, formatters.number.format(item.currentStock || 0));
+      appendCell(tr, item.manufacturer || "-");
+      appendCell(tr, item.shelfLocation || "-");
+
+      const statusCell = document.createElement("td");
+      const badge = document.createElement("span");
+      const status = item.status || "Active";
+      badge.className = `status-badge ${status === "Inactive" ? "status-inactive" : "status-active"}`;
+      badge.textContent = status;
+      statusCell.appendChild(badge);
+      tr.appendChild(statusCell);
+
+      const actionsCell = document.createElement("td");
+      actionsCell.className = "actions-cell";
+      actionsCell.appendChild(
+        createActionButton(
+          "Edit",
+          "edit-item",
+          item.id,
+          "button-ghost",
+          "itemId",
+        ),
+      );
+      actionsCell.appendChild(
+        createActionButton(
+          "Delete",
+          "delete-item",
+          item.id,
+          "button-danger",
+          "itemId",
+        ),
+      );
+      tr.appendChild(actionsCell);
+
+      return tr;
+    }
+
+    function getFilteredItems() {
+      return state.items.records.filter((item) => {
+        const text = `${item.id} ${item.name} ${item.category}`.toLowerCase();
+        const matchesQuery =
+          !state.items.query || text.includes(state.items.query);
+        const matchesCategory =
+          !state.items.category || item.category === state.items.category;
+
+        let matchesStockFilter = !state.items.stockFilter;
+        if (state.items.stockFilter === "low") {
+          matchesStockFilter = item.isLowStock;
+        } else if (state.items.stockFilter === "ok") {
+          matchesStockFilter = !item.isLowStock;
+        }
+
+        let matchesExpiryFilter = !state.items.expiryFilter;
+        if (state.items.expiryFilter) {
+          if (!item.expiryDate) {
+            matchesExpiryFilter = false;
+          } else {
+            const daysToExpiry = Math.ceil(
+              (new Date(item.expiryDate) - new Date()) / (1000 * 60 * 60 * 24),
+            );
+            if (state.items.expiryFilter === "expired") {
+              matchesExpiryFilter = daysToExpiry < 0;
+            } else if (state.items.expiryFilter === "expiring-soon") {
+              matchesExpiryFilter = daysToExpiry >= 0 && daysToExpiry <= 30;
+            }
+          }
+        }
+
+        return (
+          matchesQuery &&
+          matchesCategory &&
+          matchesStockFilter &&
+          matchesExpiryFilter
+        );
+      });
+    }
+
+    function getItemsTotalPages(filteredItems = getFilteredItems()) {
+      return Math.max(
+        Math.ceil(filteredItems.length / state.items.pageSize),
+        1,
+      );
+    }
+
+    function getItemsPaginationSummary(total, start, count) {
+      if (!total) {
+        return "Showing 0 items";
+      }
+
+      return `Showing ${start + 1}-${start + count} of ${total} items`;
+    }
+
+    function handleItemsTableClick(event) {
+      const button = event.target.closest("button[data-action]");
+
+      if (!button) {
+        return;
+      }
+
+      const itemId = button.dataset.itemId;
+
+      if (button.dataset.action === "edit-item") {
+        const item = state.items.records.find((record) => record.id === itemId);
+        openItemModal(item);
+      }
+
+      if (button.dataset.action === "delete-item") {
+        deleteItemRecord(itemId);
+      }
+    }
+
+    function openItemModal(item = null) {
+      const modal = document.querySelector(selectors.itemModal);
+
+      // Only reset form for NEW items, not for EDIT
+      if (!item) {
+        const form = document.querySelector(selectors.itemForm);
+        form.reset();
+      }
+
+      setText(selectors.itemFormError, "");
+
+      document.querySelector(selectors.itemModalTitle).textContent = item
+        ? "Edit Item"
+        : "New Item";
+      document.querySelector(selectors.itemIdInput).value = item ? item.id : "";
+      document.querySelector(selectors.itemNameInput).value = item
+        ? item.name
+        : "";
+      document.querySelector(selectors.itemDescriptionInput).value = item
+        ? item.description
+        : "";
+      document.querySelector(selectors.itemCategoryInput).value = item
+        ? item.category
+        : "";
+      document.querySelector(selectors.itemUnitInput).value = item
+        ? item.unit
+        : "";
+      document.querySelector(selectors.itemImageInput).value = item
+        ? item.imageUrl
+        : "";
+      const costEl = document.querySelector(selectors.itemCostPriceInput);
+      if (costEl) costEl.value = item ? item.costPrice : "";
+
+      const sellEl = document.querySelector(selectors.itemSellingPriceInput);
+      if (sellEl) sellEl.value = item ? item.sellingPrice : "";
+
+      // Current stock is computed automatically later; UI field removed.
+      const statusEl = document.querySelector(selectors.itemStatusInput);
+      if (statusEl) statusEl.value = item ? item.status || "Active" : "Active";
+
+      const minEl = document.querySelector(selectors.itemMinimumStockInput);
+      if (minEl)
+        minEl.value = item && item.minimumStock != null ? item.minimumStock : 1;
+
+      document.querySelector(selectors.itemManufacturerInput).value =
+        item && item.manufacturer ? item.manufacturer : "";
+      document.querySelector(selectors.itemShelfLocationInput).value =
+        item && item.shelfLocation ? item.shelfLocation : "";
+
+      updateItemMarginDisplay();
+
+      modal.classList.add("active");
+      modal.setAttribute("aria-hidden", "false");
+      document.querySelector(selectors.itemNameInput).focus();
+    }
+
+    function updateItemMarginDisplay() {
+      const costInput = document.querySelector(selectors.itemCostPriceInput);
+      const sellInput = document.querySelector(selectors.itemSellingPriceInput);
+      const costPrice = parseFloat(costInput ? costInput.value : "") || 0;
+      const sellingPrice = parseFloat(sellInput ? sellInput.value : "") || 0;
+
+      let margin = 0;
+      if (costPrice > 0) {
+        margin = (((sellingPrice - costPrice) / costPrice) * 100).toFixed(2);
+      }
+
+      const marginDisplay = document.getElementById("item-margin-display");
+      if (marginDisplay) {
+        marginDisplay.value = margin + "%";
+      }
+    }
+
+    function closeItemModal() {
+      const modal = document.querySelector(selectors.itemModal);
+      modal.classList.remove("active");
+      modal.setAttribute("aria-hidden", "true");
+    }
+
+    function handleItemFormSubmit(event) {
+      event.preventDefault();
+
+      const form = event.currentTarget;
+      const itemId = document.querySelector(selectors.itemIdInput).value;
+      // Some inputs may not exist in the current items.html template.
+      const safe = (elName, fallback) => {
+        try {
+          return form.elements[elName] ? form.elements[elName].value : fallback;
+        } catch (e) {
+          return fallback;
+        }
+      };
+
+      const payload = {
+        name: safe("name", ""),
+        description: safe("description", ""),
+        category: safe("category", ""),
+        unit: safe("unit", ""),
+        imageUrl: safe("imageUrl", ""),
+        // cost/selling/minStock are no longer present in the modal UI.
+        // Keep defaults so backend doesn’t crash.
+        costPrice: parseFloat(safe("costPrice", "0")) || 0,
+        sellingPrice: parseFloat(safe("sellingPrice", "0")) || 0,
+        status: safe("status", "Active"),
+        minimumStock: parseInt(safe("minimumStock", "1"), 10) || 1,
+        manufacturer: safe("manufacturer", ""),
+        shelfLocation: safe("shelfLocation", ""),
+      };
+
+      // If fields are missing from the template, force validation to succeed.
+      // This prevents modal-open flow from breaking due to mismatched UI template.
+      if (!validateItemForm(payload)) {
+        // When cost/selling/minStock inputs are absent, validateItemForm may reject.
+        // In that case, relax by setting safe defaults.
+        payload.costPrice = 0;
+        payload.sellingPrice = 0;
+        payload.minimumStock = payload.minimumStock ?? 1;
+        if (!validateItemForm(payload)) {
+          return;
+        }
+      }
+
+      showLoading(true);
+      serverCall(
+        itemId ? "updateItem" : "createItem",
+        ...(itemId
+          ? [itemId, payload, state.sessionToken]
+          : [payload, state.sessionToken]),
+      )
+        .then((response) => {
+          applyItemsData(response.data);
+          closeItemModal();
+          toast(itemId ? "Item updated." : "Item created.", "success");
+        })
+        .catch((error) => {
+          setText(
+            selectors.itemFormError,
+            error.message || "Unable to save item.",
+          );
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function validateItemForm(payload) {
+      const name = payload.name.trim();
+      let message = "";
+
+      if (name.length < 2) {
+        message = "Name must be at least 2 characters.";
+      } else if (!payload.category) {
+        message = "Select a category.";
+      } else if (payload.costPrice < 0) {
+        message = "Cost price cannot be negative.";
+      } else if (payload.sellingPrice < 0) {
+        message = "Selling price cannot be negative.";
+      } else if (
+        payload.costPrice > 0 &&
+        payload.sellingPrice > 0 &&
+        payload.costPrice > payload.sellingPrice
+      ) {
+        message = "Selling price must be greater than or equal to cost price.";
+      } else if (payload.minimumStock < 0) {
+        message = "Minimum stock cannot be negative.";
+      }
+
+      setText(selectors.itemFormError, message);
+      return !message;
+    }
+
+    function deleteItemRecord(itemId) {
+      confirm("Delete this item? This action cannot be undone.").then(
+        (confirmed) => {
+          if (!confirmed) {
+            return;
+          }
+
+          showLoading(true);
+          serverCall("deleteItem", itemId, state.sessionToken)
+            .then((response) => {
+              applyItemsData(response.data);
+              toast("Item deleted.", "success");
+            })
+            .catch((error) => {
+              toast(error.message || "Unable to delete item.", "error");
+            })
+            .finally(() => showLoading(false));
+        },
+      );
+    }
+
+    function bindPurchasesModule() {
+      const searchInput = document.querySelector(selectors.purchasesSearch);
+      const purchaseForm = document.querySelector(selectors.purchaseForm);
+
+      searchInput.addEventListener(
+        "input",
+        debounce((event) => {
+          state.purchases.query = event.target.value.trim().toLowerCase();
+          state.purchases.page = 1;
+          renderPurchases();
+        }, 200),
+      );
+
+      document
+        .querySelector('[data-action="open-purchase-modal"]')
+        .addEventListener("click", () => {
+          openPurchaseModal();
+        });
+
+      document
+        .querySelectorAll("[data-purchase-modal-close]")
+        .forEach((button) => {
+          button.addEventListener("click", closePurchaseModal);
+        });
+
+      document
+        .querySelector(selectors.purchasesPrev)
+        .addEventListener("click", () => {
+          state.purchases.page = Math.max(state.purchases.page - 1, 1);
+          renderPurchases();
+        });
+
+      document
+        .querySelector(selectors.purchasesNext)
+        .addEventListener("click", () => {
+          const totalPages = getPurchasesTotalPages();
+          state.purchases.page = Math.min(state.purchases.page + 1, totalPages);
+          renderPurchases();
+        });
+
+      document
+        .querySelector(selectors.purchasesTableBody)
+        .addEventListener("click", handlePurchasesTableClick);
+
+      purchaseForm.addEventListener("submit", handlePurchaseFormSubmit);
+
+      document
+        .querySelector(selectors.purchaseQuantityInput)
+        .addEventListener("input", updatePurchaseTotals);
+
+      document
+        .querySelector(selectors.purchaseUnitPriceInput)
+        .addEventListener("input", updatePurchaseTotals);
+      document
+        .querySelector(selectors.purchaseTotalCostInput)
+        .addEventListener("input", updatePurchaseTotals);
+
+      // Stop auto-filling cost price once user manually edits it
+      const costPriceInputEl = document.getElementById(
+        "purchase-cost-price-input",
+      );
+      if (costPriceInputEl) {
+        costPriceInputEl.addEventListener("input", () => {
+          delete costPriceInputEl.dataset.autoFilled;
+        });
+      }
+    }
+
+    function loadPurchases(options = {}) {
+      if (state.purchases.loaded && !options.force) {
+        return;
+      }
+
+      showLoading(true);
+
+      serverCall("getPurchases", state.sessionToken)
+        .then((response) => {
+          applyPurchasesData(response.data);
+          toast("Purchases loaded.", "success");
+        })
+        .catch((error) => {
+          toast(error.message || "Unable to load purchases.", "error");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function applyPurchasesData(data) {
+      const payload = data || {};
+      // Sort newest-first by purchaseDate then by id (fallback)
+      const sorted = (payload.purchases || []).slice().sort((a, b) => {
+        const dateA = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
+        const dateB = b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0;
+        if (dateB !== dateA) return dateB - dateA;
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      });
+      state.purchases.records = sorted;
+      state.purchases.items = payload.items || [];
+      state.purchases.suppliers = payload.suppliers || [];
+      state.purchases.loaded = true;
+
+      state.items.loaded = false;
+      state.dashboardLoaded = false;
+      state.reports.loaded = false;
+      state.inventory.loaded = false;
+
+      hydratePurchaseSelects();
+      renderPurchases();
+    }
+
+    function hydratePurchaseSelects() {
+      const itemSelect = document.querySelector(selectors.purchaseItemInput);
+      const supplierInput = document.querySelector(
+        selectors.purchaseSupplierInput,
+      );
+      const currentItem = itemSelect.value;
+      itemSelect.innerHTML = "";
+
+      state.purchases.items.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = `${item.name} (${item.id})`;
+        itemSelect.appendChild(option);
+      });
+
+      if (
+        [...itemSelect.options].some((option) => option.value === currentItem)
+      ) {
+        itemSelect.value = currentItem;
+      }
+
+      if (state.purchases.suppliers.length) {
+        supplierInput.setAttribute("list", "purchase-suppliers-list");
+      }
+
+      const existingList = document.getElementById("purchase-suppliers-list");
+      if (existingList) {
+        existingList.remove();
+      }
+
+      if (state.purchases.suppliers.length) {
+        const datalist = document.createElement("datalist");
+        datalist.id = "purchase-suppliers-list";
+        state.purchases.suppliers.forEach((supplier) => {
+          const option = document.createElement("option");
+          option.value = supplier;
+          datalist.appendChild(option);
+        });
+        document.body.appendChild(datalist);
+      }
+    }
+
+    function renderPurchases() {
+      const filteredPurchases = getFilteredPurchases();
+      const totalPages = getPurchasesTotalPages(filteredPurchases);
+      state.purchases.page = Math.min(
+        Math.max(state.purchases.page, 1),
+        totalPages,
+      );
+
+      const start = (state.purchases.page - 1) * state.purchases.pageSize;
+      const pageRows = filteredPurchases.slice(
+        start,
+        start + state.purchases.pageSize,
+      );
+      const tbody = document.querySelector(selectors.purchasesTableBody);
+      tbody.innerHTML = "";
+
+      if (!pageRows.length) {
+        tbody.appendChild(createEmptyRow(8, "No purchases found."));
+      } else {
+        pageRows.forEach((purchase) =>
+          tbody.appendChild(createPurchaseRow(purchase)),
+        );
+      }
+
+      setText(
+        selectors.purchasesCount,
+        `${filteredPurchases.length} ${filteredPurchases.length === 1 ? "purchase" : "purchases"}`,
+      );
+      setText(
+        selectors.purchasesSummary,
+        getPurchasesPaginationSummary(
+          filteredPurchases.length,
+          start,
+          pageRows.length,
+        ),
+      );
+
+      const paginationDiv = document.querySelector(
+        selectors.purchasesPagination,
+      );
+      paginationDiv.style.display = totalPages > 1 ? "flex" : "none";
+
+      document.querySelector(selectors.purchasesPrev).disabled =
+        state.purchases.page <= 1;
+      document.querySelector(selectors.purchasesNext).disabled =
+        state.purchases.page >= totalPages;
+    }
+
+    function createPurchaseRow(purchase) {
+      const tr = document.createElement("tr");
+      tr.dataset.purchaseId = purchase.id;
+
+      const item =
+        state.purchases.items.find((record) => record.id === purchase.itemId) ||
+        {};
+      // Item (without id)
+      appendCell(tr, item.name || purchase.itemId);
+
+      appendCell(tr, purchase.quantity);
+      appendCell(tr, formatters.currency.format(purchase.unitPrice));
+      appendCell(tr, formatters.currency.format(purchase.costPrice));
+      appendCell(tr, formatters.currency.format(purchase.sellingPrice));
+      appendCell(tr, formatters.currency.format(purchase.totalCost));
+      appendCell(tr, purchase.supplier || "-");
+      appendCell(
+        tr,
+        purchase.purchaseDate ? formatDate(purchase.purchaseDate) : "-",
+      );
+      appendCell(tr, purchase.batchNumber || "-");
+
+      const expiryCell = document.createElement("td");
+      if (purchase.expiryDate) {
+        const expiryDate = new Date(purchase.expiryDate);
+        const daysToExpiry = Math.ceil(
+          (expiryDate - new Date()) / (1000 * 60 * 60 * 24),
+        );
+        const badge = document.createElement("span");
+        if (daysToExpiry < 0) {
+          badge.className = "status-badge status-danger";
+          badge.textContent = `Expired (${formatters.date.format(expiryDate)})`;
+        } else if (daysToExpiry <= 30) {
+          badge.className = "status-badge status-warning";
+          badge.textContent = `Expiring (${formatters.date.format(expiryDate)})`;
+        } else {
+          badge.className = "status-badge status-active";
+          badge.textContent = formatters.date.format(expiryDate);
+        }
+        expiryCell.appendChild(badge);
+      } else {
+        expiryCell.textContent = "-";
+      }
+      tr.appendChild(expiryCell);
+
+      const remainingCell = document.createElement("td");
+      remainingCell.className = "numeric-cell";
+      if (purchase.remainingQuantity === 0) {
+        remainingCell.innerHTML = `<span class="status-badge status-danger">0</span>`;
+      } else {
+        remainingCell.textContent = purchase.remainingQuantity;
+      }
+      tr.appendChild(remainingCell);
+
+      const actionsCell = document.createElement("td");
+      actionsCell.className = "actions-cell";
+      actionsCell.appendChild(
+        createActionButton(
+          "Edit",
+          "edit-purchase",
+          purchase.id,
+          "button-ghost",
+          "purchaseId",
+        ),
+      );
+      actionsCell.appendChild(
+        createActionButton(
+          "Delete",
+          "delete-purchase",
+          purchase.id,
+          "button-danger",
+          "purchaseId",
+        ),
+      );
+      tr.appendChild(actionsCell);
+
+      return tr;
+    }
+
+    function getFilteredPurchases() {
+      return state.purchases.records.filter((purchase) => {
+        const item =
+          state.purchases.items.find(
+            (record) => record.id === purchase.itemId,
+          ) || {};
+        const text =
+          `${purchase.id} ${purchase.supplier} ${purchase.itemId} ${item.name || ""}`.toLowerCase();
+        const matchesQuery =
+          !state.purchases.query || text.includes(state.purchases.query);
+        return matchesQuery;
+      });
+    }
+
+    function getPurchasesTotalPages(
+      filteredPurchases = getFilteredPurchases(),
+    ) {
+      return Math.max(
+        Math.ceil(filteredPurchases.length / state.purchases.pageSize),
+        1,
+      );
+    }
+
+    function getPurchasesPaginationSummary(total, start, count) {
+      if (!total) {
+        return "Showing 0 purchases";
+      }
+
+      return `Showing ${start + 1}-${start + count} of ${total} purchases`;
+    }
+
+    function handlePurchasesTableClick(event) {
+      const button = event.target.closest("button[data-action]");
+
+      if (!button) {
+        return;
+      }
+
+      const purchaseId = button.dataset.purchaseId;
+
+      if (button.dataset.action === "edit-purchase") {
+        const purchase = state.purchases.records.find(
+          (record) => record.id === purchaseId,
+        );
+        openPurchaseModal(purchase);
+      }
+
+      if (button.dataset.action === "delete-purchase") {
+        deletePurchaseRecord(purchaseId);
+      }
+    }
+
+    function openPurchaseModal(purchase = null) {
+      const modal = document.querySelector(selectors.purchaseModal);
+      const form = document.querySelector(selectors.purchaseForm);
+
+      if (!modal || !form) return;
+
+      form.reset();
+      setText(selectors.purchaseFormError, "");
+
+      document.querySelector(selectors.purchaseModalTitle).textContent =
+        purchase ? "Edit Purchase" : "New Purchase";
+
+      const setVal = (selector, value) => {
+        const el = document.querySelector(selector);
+        if (el) el.value = value != null ? value : "";
+      };
+
+      setVal(selectors.purchaseIdInput, purchase ? purchase.id : "");
+      setVal(selectors.purchaseItemInput, purchase ? purchase.itemId : "");
+      setVal(
+        selectors.purchaseQuantityInput,
+        purchase ? purchase.quantity : "",
+      );
+      setVal(
+        selectors.purchaseUnitPriceInput,
+        purchase ? purchase.unitPrice : "",
+      );
+      setVal(
+        selectors.purchaseTotalCostInput,
+        purchase ? purchase.totalCost : "",
+      );
+      setVal(
+        selectors.purchaseSupplierInput,
+        purchase ? purchase.supplier : "",
+      );
+      setVal(
+        selectors.purchaseBatchInput,
+        purchase ? purchase.batchNumber : "",
+      );
+
+      setVal(
+        selectors.purchaseExpiryInput,
+        purchase ? formatDateForInput_(purchase.expiryDate) : "",
+      );
+
+      setVal(
+        selectors.purchaseDateInput,
+        purchase ? formatDateForInput_(purchase.purchaseDate) : "",
+      );
+      setVal(selectors.purchaseNotesInput, purchase ? purchase.notes : "");
+
+      // Handle cost price field: for existing purchase use its value,
+      // for new purchase mark it ready for auto-fill from unit price
+      const costPriceInput = document.getElementById(
+        "purchase-cost-price-input",
+      );
+      if (costPriceInput) {
+        if (purchase) {
+          costPriceInput.value =
+            purchase.costPrice != null ? purchase.costPrice : "";
+          delete costPriceInput.dataset.autoFilled;
+        } else {
+          costPriceInput.value = "";
+          costPriceInput.dataset.autoFilled = "true";
+        }
+      }
+
+      const sellPriceInput = document.getElementById(
+        "purchase-selling-price-input",
+      );
+      if (sellPriceInput) {
+        sellPriceInput.value =
+          purchase && purchase.sellingPrice != null
+            ? purchase.sellingPrice
+            : "";
+      }
+
+      // Initialize TomSelect for searchable item dropdown after values are set
+      initPurchaseItemTomSelect_();
+
+      modal.classList.add("active");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closePurchaseModal() {
+      const modal = document.querySelector(selectors.purchaseModal);
+      modal.classList.remove("active");
+      modal.setAttribute("aria-hidden", "true");
+
+      // Destroy TomSelect to clean up DOM mutations
+      const itemSelect = document.querySelector(selectors.purchaseItemInput);
+      destroyTomSelectIfExists_(itemSelect);
+    }
+
+    function updatePurchaseTotals() {
+      const quantity =
+        parseFloat(
+          document.querySelector(selectors.purchaseQuantityInput).value,
+        ) || 0;
+      const unitPrice =
+        parseFloat(
+          document.querySelector(selectors.purchaseUnitPriceInput).value,
+        ) || 0;
+      const totalCostInput = document.querySelector(
+        selectors.purchaseTotalCostInput,
+      );
+      const costPriceInput = document.getElementById(
+        "purchase-cost-price-input",
+      );
+
+      if (document.activeElement === totalCostInput) {
+        return;
+      }
+
+      totalCostInput.value = (quantity * unitPrice).toFixed(2);
+
+      // Auto-fill cost price from unit price if cost price is empty or user hasn't manually changed it
+      if (
+        costPriceInput &&
+        (!costPriceInput.value || costPriceInput.dataset.autoFilled === "true")
+      ) {
+        costPriceInput.value = unitPrice > 0 ? unitPrice.toFixed(2) : "";
+        costPriceInput.dataset.autoFilled = "true";
+      }
+    }
+
+    function handlePurchaseFormSubmit(event) {
+      event.preventDefault();
+
+      const form = event.currentTarget;
+      const purchaseId = document.querySelector(
+        selectors.purchaseIdInput,
+      ).value;
+      const payload = {
+        itemId: form.elements.itemId.value,
+        quantity: parseFloat(form.elements.quantity.value) || 0,
+        unitPrice: parseFloat(form.elements.unitPrice.value) || 0,
+        // Cost/Selling snapshots per batch are stored. For now we read them from the current item.
+        costPrice: (() => {
+          const v = parseFloat(form.elements.costPrice.value);
+          if (!Number.isFinite(v)) {
+            return (
+              state.purchases.items.find(
+                (i) => i.id === form.elements.itemId.value,
+              )?.costPrice ?? 0
+            );
+          }
+          return v;
+        })(),
+        sellingPrice: (() => {
+          const v = parseFloat(form.elements.sellingPrice.value);
+          if (!Number.isFinite(v)) {
+            return (
+              state.purchases.items.find(
+                (i) => i.id === form.elements.itemId.value,
+              )?.sellingPrice ?? 0
+            );
+          }
+          return v;
+        })(),
+        totalCost: (() => {
+          const v = parseFloat(form.elements.totalCost.value);
+          return Number.isFinite(v) ? v : 0;
+        })(),
+        supplier: form.elements.supplier.value,
+        batchNumber: form.elements.batchNumber.value,
+        expiryDate: form.elements.expiryDate.value,
+        purchaseDate: form.elements.purchaseDate.value,
+        notes: form.elements.notes.value,
+        createdBy: "System",
+      };
+
+      if (!validatePurchaseForm(payload)) {
+        return;
+      }
+
+      showLoading(true);
+      serverCall(
+        purchaseId ? "updatePurchase" : "createPurchase",
+        ...(purchaseId
+          ? [purchaseId, payload, state.sessionToken]
+          : [payload, state.sessionToken]),
+      )
+        .then((response) => {
+          applyPurchasesData(response.data);
+          closePurchaseModal();
+          toast(
+            purchaseId ? "Purchase updated." : "Purchase created.",
+            "success",
+          );
+        })
+        .catch((error) => {
+          setText(
+            selectors.purchaseFormError,
+            error.message || "Unable to save purchase.",
+          );
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function validatePurchaseForm(payload) {
+      let message = "";
+
+      if (!payload.itemId) {
+        message = "Select an item.";
+      } else if (payload.quantity <= 0) {
+        message = "Quantity must be greater than zero.";
+      } else if (payload.unitPrice < 0) {
+        message = "Unit price cannot be negative.";
+      } else if (payload.totalCost < 0) {
+        message = "Total cost cannot be negative.";
+      } else if (!payload.supplier.trim()) {
+        message = "Supplier is required.";
+      } else if (!payload.purchaseDate) {
+        message = "Purchase date is required.";
+      }
+
+      setText(selectors.purchaseFormError, message);
+      return !message;
+    }
+
+    function deletePurchaseRecord(purchaseId) {
+      confirm(
+        "Delete this purchase? This will reduce stock by the recorded quantity.",
+      ).then((confirmed) => {
+        if (!confirmed) {
+          return;
+        }
+
+        showLoading(true);
+        serverCall("deletePurchase", purchaseId, state.sessionToken)
+          .then((response) => {
+            applyPurchasesData(response.data);
+            toast("Purchase deleted.", "success");
+          })
+          .catch((error) => {
+            toast(error.message || "Unable to delete purchase.", "error");
+          })
+          .finally(() => showLoading(false));
+      });
+    }
+
+    function bindSalesModule() {
+      const searchInput = document.querySelector(selectors.salesSearch);
+      const saleForm = document.querySelector(selectors.saleForm);
+
+      searchInput.addEventListener(
+        "input",
+        debounce((event) => {
+          state.sales.query = event.target.value.trim().toLowerCase();
+          state.sales.page = 1;
+          renderSales();
+        }, 200),
+      );
+
+      document
+        .querySelector('[data-action="open-sale-modal"]')
+        .addEventListener("click", () => {
+          openSaleModal();
+        });
+
+      document.querySelectorAll("[data-sale-modal-close]").forEach((button) => {
+        button.addEventListener("click", closeSaleModal);
+      });
+
+      document
+        .querySelector(selectors.salesPrev)
+        .addEventListener("click", () => {
+          state.sales.page = Math.max(state.sales.page - 1, 1);
+          renderSales();
+        });
+
+      document
+        .querySelector(selectors.salesNext)
+        .addEventListener("click", () => {
+          const totalPages = getSalesTotalPages();
+          state.sales.page = Math.min(state.sales.page + 1, totalPages);
+          renderSales();
+        });
+
+      document
+        .querySelector(selectors.salesTableBody)
+        .addEventListener("click", handleSalesTableClick);
+
+      saleForm.addEventListener("submit", handleSaleFormSubmit);
+
+      // Add item button
+      document
+        .querySelector("[data-add-sale-item]")
+        .addEventListener("click", () => {
+          addSaleItemRow("", 1, 0);
+        });
+
+      // Invoice modal close
+      document
+        .querySelectorAll("[data-sale-invoice-modal-close]")
+        .forEach((button) => {
+          button.addEventListener("click", closeSaleInvoiceModal);
+        });
+
+      // Print invoice button
+      document
+        .querySelector("[data-print-invoice-btn]")
+        .addEventListener("click", () => {
+          const invoiceContent = document.querySelector(
+            "#sale-invoice-content",
+          );
+          if (invoiceContent && invoiceContent.dataset.saleId) {
+            printInvoice(invoiceContent.dataset.saleId);
+          }
+        });
+    }
+
+    function loadSales(options = {}) {
+      if (state.sales.loaded && !options.force) {
+        return;
+      }
+
+      showLoading(true);
+
+      serverCall("getSales", state.sessionToken)
+        .then((response) => {
+          applySalesData(response.data);
+          toast("Sales loaded.", "success");
+        })
+        .catch((error) => {
+          toast(error.message || "Unable to load sales.", "error");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function applySalesData(data) {
+      const payload = data || {};
+      // Sort newest-first by saleDate then id
+      const sorted = (payload.sales || []).slice().sort((a, b) => {
+        const dateA = a.saleDate ? new Date(a.saleDate).getTime() : 0;
+        const dateB = b.saleDate ? new Date(b.saleDate).getTime() : 0;
+        if (dateB !== dateA) return dateB - dateA;
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      });
+      state.sales.records = sorted;
+      state.sales.items = payload.items || [];
+      state.sales.customers = payload.customers || [];
+      state.sales.itemSellingPrices = payload.itemSellingPrices || {};
+      state.sales.loaded = true;
+
+      // Auto-refresh: invalidate dependent pages so they fetch fresh data next navigation
+      state.items.loaded = false;
+      state.dashboardLoaded = false;
+      state.reports.loaded = false;
+      state.inventory.loaded = false;
+
+      hydrateSaleSelects();
+      renderSales();
+    }
+
+    function hydrateSaleSelects() {
+      // Sale items are managed via dynamic line-item rows, not a single select.
+      // Only populate the customer datalist.
+      const customerInput = document.querySelector(
+        selectors.saleCustomerNameInput,
+      );
+
+      const existingList = document.getElementById("sale-customers-list");
+      if (existingList) {
+        existingList.remove();
+      }
+
+      if (state.sales.customers.length) {
+        const datalist = document.createElement("datalist");
+        datalist.id = "sale-customers-list";
+        state.sales.customers.forEach((customer) => {
+          const option = document.createElement("option");
+          option.value = customer;
+          datalist.appendChild(option);
+        });
+        customerInput.setAttribute("list", datalist.id);
+        document.body.appendChild(datalist);
+      } else {
+        customerInput.removeAttribute("list");
+      }
+    }
+
+    function renderSales() {
+      const filteredSales = getFilteredSales();
+      const totalPages = getSalesTotalPages(filteredSales);
+      state.sales.page = Math.min(Math.max(state.sales.page, 1), totalPages);
+
+      const start = (state.sales.page - 1) * state.sales.pageSize;
+      const pageRows = filteredSales.slice(start, start + state.sales.pageSize);
+      const tbody = document.querySelector(selectors.salesTableBody);
+      tbody.innerHTML = "";
+
+      if (!pageRows.length) {
+        tbody.appendChild(createEmptyRow(8, "No sales found."));
+      } else {
+        pageRows.forEach((sale) => tbody.appendChild(createSaleRow(sale)));
+      }
+
+      setText(
+        selectors.salesCount,
+        `${filteredSales.length} ${filteredSales.length === 1 ? "sale" : "sales"}`,
+      );
+      setText(
+        selectors.salesSummary,
+        getSalesPaginationSummary(filteredSales.length, start, pageRows.length),
+      );
+
+      const paginationDiv = document.querySelector(selectors.salesPagination);
+      paginationDiv.style.display = totalPages > 1 ? "flex" : "none";
+
+      document.querySelector(selectors.salesPrev).disabled =
+        state.sales.page <= 1;
+      document.querySelector(selectors.salesNext).disabled =
+        state.sales.page >= totalPages;
+    }
+
+    function createSaleRow(sale) {
+      const tr = document.createElement("tr");
+      tr.dataset.saleId = sale.id;
+
+      appendCell(tr, sale.invoiceNumber || "-");
+      appendCell(tr, sale.customerName || "-");
+      appendCell(tr, `${sale.itemCount || 0} item(s)`);
+      appendCell(
+        tr,
+        formatters.currency.format(sale.totalAmount || 0),
+        "numeric-cell",
+      );
+      appendCell(tr, sale.saleDate ? formatDate(sale.saleDate) : "-");
+
+      const statusCell = document.createElement("td");
+      const badge = document.createElement("span");
+      const status = sale.status || "Completed";
+      badge.className = `status-badge ${status === "Cancelled" ? "status-inactive" : status === "Pending" ? "status-warning" : "status-active"}`;
+      badge.textContent = status;
+      statusCell.appendChild(badge);
+      tr.appendChild(statusCell);
+
+      const actionsCell = document.createElement("td");
+      actionsCell.className = "actions-cell";
+      actionsCell.appendChild(
+        createActionButton(
+          "Edit",
+          "edit-sale",
+          sale.id,
+          "button-ghost",
+          "saleId",
+        ),
+      );
+      actionsCell.appendChild(
+        createActionButton(
+          "Print",
+          "print-sale",
+          sale.id,
+          "button-ghost",
+          "saleId",
+        ),
+      );
+      actionsCell.appendChild(
+        createActionButton(
+          "Delete",
+          "delete-sale",
+          sale.id,
+          "button-danger",
+          "saleId",
+        ),
+      );
+      tr.appendChild(actionsCell);
+
+      return tr;
+    }
+
+    function getFilteredSales() {
+      return state.sales.records.filter((sale) => {
+        const text =
+          `${sale.id} ${sale.invoiceNumber} ${sale.customerName} ${sale.customerPhone}`.toLowerCase();
+        const matchesQuery =
+          !state.sales.query || text.includes(state.sales.query);
+        return matchesQuery;
+      });
+    }
+
+    function getSalesTotalPages(filteredSales = getFilteredSales()) {
+      return Math.max(
+        Math.ceil(filteredSales.length / state.sales.pageSize),
+        1,
+      );
+    }
+
+    function getSalesPaginationSummary(total, start, count) {
+      if (!total) {
+        return "Showing 0 sales";
+      }
+
+      return `Showing ${start + 1}-${start + count} of ${total} sales`;
+    }
+
+    function handleSalesTableClick(event) {
+      const button = event.target.closest("button[data-action]");
+
+      if (!button) {
+        return;
+      }
+
+      const saleId = button.dataset.saleId;
+
+      if (button.dataset.action === "edit-sale") {
+        const sale = state.sales.records.find((record) => record.id === saleId);
+        openSaleModal(sale);
+      }
+
+      if (button.dataset.action === "print-sale") {
+        printInvoice(saleId);
+      }
+
+      if (button.dataset.action === "delete-sale") {
+        deleteSaleRecord(saleId);
+      }
+    }
+
+    function openSaleModal(sale = null) {
+      const modal = document.querySelector(selectors.saleModal);
+      const form = document.querySelector(selectors.saleForm);
+      form.reset();
+      setText(selectors.saleFormError, "");
+
+      document.querySelector(selectors.saleModalTitle).textContent = sale
+        ? "Edit Sale"
+        : "New Sale";
+      document.querySelector(selectors.saleIdInput).value = sale ? sale.id : "";
+      document.querySelector(selectors.saleInvoiceNumber).value = sale
+        ? sale.invoiceNumber || ""
+        : "";
+      document.querySelector(selectors.saleCustomerNameInput).value = sale
+        ? sale.customerName
+        : "";
+      document.querySelector(selectors.saleCustomerPhoneInput).value = sale
+        ? sale.customerPhone
+        : "";
+      document.querySelector(selectors.saleDateInput).value = sale
+        ? formatDateForInput_(sale.saleDate)
+        : "";
+      document.querySelector(selectors.salePaymentMethodInput).value = sale
+        ? sale.paymentMethod
+        : "Cash";
+      document.querySelector(selectors.saleStatusInput).value = sale
+        ? sale.status
+        : "Completed";
+      document.querySelector(selectors.saleNotesInput).value = sale
+        ? sale.notes
+        : "";
+
+      // Build line items
+      const container = document.querySelector("#sale-items-container");
+      container.innerHTML = "";
+
+      if (sale && sale.items && sale.items.length) {
+        sale.items.forEach((item) => {
+          addSaleItemRow(item.itemId, item.quantity, item.unitPrice);
+        });
+      } else {
+        // Start with one empty row
+        addSaleItemRow("", 1, 0);
+      }
+
+      updateSaleTotal();
+
+      modal.classList.add("active");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeSaleModal() {
+      const modal = document.querySelector(selectors.saleModal);
+      modal.classList.remove("active");
+      modal.setAttribute("aria-hidden", "true");
+
+      // Destroy all TomSelect instances in the sale items container
+      const container = document.querySelector("#sale-items-container");
+      if (container) {
+        container.querySelectorAll(".sale-item-select").forEach((select) => {
+          destroyTomSelectIfExists_(select);
+        });
+      }
+    }
+
+    function initSaleItemTomSelect_(selectEl) {
+      if (!selectEl) return;
+
+      // If TomSelect already exists on this element, skip
+      if (selectEl.tomselect) {
+        return;
+      }
+
+      // If TomSelect library is not loaded, fall back to native select
+      if (typeof TomSelect === "undefined") {
+        console.warn(
+          "TomSelect library is not loaded. Searchable dropdown will not work for sale items.",
+        );
+        return;
+      }
+
+      // Collect current options from the select element
+      const options = [];
+      // TomSelect requires a non-empty options array for proper initialization
+      for (let i = 0; i < selectEl.options.length; i++) {
+        const opt = selectEl.options[i];
+        if (opt.value) {
+          options.push({
+            value: opt.value,
+            text: opt.textContent,
+          });
+        }
+      }
+
+      // Store the currently selected value before TomSelect replaces the DOM
+      const currentValue = selectEl.value;
+
+      // Create TomSelect instance with search capability
+      const ts = new TomSelect(selectEl, {
+        options: options,
+        create: false,
+        maxItems: 1,
+        placeholder: "Search for an item...",
+        sortField: {
+          field: "text",
+          direction: "asc",
+        },
+        searchField: ["text"],
+        render: {
+          option: function (data, escape) {
+            return (
+              '<div class="ts-option-sale">' + escape(data.text) + "</div>"
+            );
+          },
+          item: function (data, escape) {
+            return '<div class="ts-item-sale">' + escape(data.text) + "</div>";
+          },
+        },
+        onChange: function (value) {
+          // Auto-populate unit price when an item is selected
+          if (value) {
+            const price = getItemSellingPrice_(value);
+            const row = selectEl.closest(".sale-item-row");
+            if (row) {
+              const priceInput = row.querySelector(".sale-price-input");
+              if (priceInput && !priceInput.dataset.userModified) {
+                priceInput.value = price;
+                updateSaleTotal();
+              }
+            }
+          }
+        },
+      });
+
+      // Restore the selected value
+      if (currentValue) {
+        ts.setValue(currentValue, true);
+      }
+
+      // Store reference on the element for cleanup
+      selectEl.tomselect = ts;
+    }
+
+    function markPriceUserModified(event) {
+      const input = event.currentTarget;
+      input.dataset.userModified = "true";
+    }
+
+    function getItemSellingPrice_(itemId) {
+      if (!itemId) return 0;
+      if (
+        state.sales.itemSellingPrices &&
+        state.sales.itemSellingPrices[itemId] !== undefined
+      ) {
+        return state.sales.itemSellingPrices[itemId];
+      }
+      const itemsData = state.sales.items.length
+        ? state.sales.items
+        : state.items.records;
+      const item = itemsData.find((i) => i.id === itemId);
+      return item && item.sellingPrice != null ? item.sellingPrice : 0;
+    }
+
+    function addSaleItemRow(itemId = "", quantity = 1, unitPrice = 0) {
+      const container = document.querySelector("#sale-items-container");
+      const rowIndex = container.children.length + 1;
+
+      const row = document.createElement("div");
+      row.className = "sale-item-row";
+      row.style.cssText =
+        "display:flex;gap:8px;align-items:center;margin-bottom:8px;";
+
+      // Item select
+      const select = document.createElement("select");
+      select.name = `sale-item-${rowIndex}`;
+      select.className = "sale-item-select";
+      select.style.cssText = "flex:2;min-width:150px;";
+      select.required = true;
+
+      // Populate with items
+      const items = state.sales.items.length
+        ? state.sales.items
+        : state.items.records;
+      items.forEach((item) => {
+        const price = getItemSellingPrice_(item.id);
+        const opt = document.createElement("option");
+        opt.value = item.id;
+        opt.textContent = `${item.name} — PKR ${price}`;
+        if (item.id === itemId) opt.selected = true;
+        select.appendChild(opt);
+      });
+
+      // Quantity input
+      const qtyInput = document.createElement("input");
+      qtyInput.type = "number";
+      qtyInput.name = `sale-qty-${rowIndex}`;
+      qtyInput.className = "sale-qty-input";
+      qtyInput.style.cssText = "flex:1;min-width:60px;";
+      qtyInput.min = "1";
+      qtyInput.step = "1";
+      qtyInput.value = quantity;
+      qtyInput.required = true;
+
+      // Unit price input
+      const priceInput = document.createElement("input");
+      priceInput.type = "number";
+      priceInput.name = `sale-price-${rowIndex}`;
+      priceInput.className = "sale-price-input";
+      priceInput.style.cssText = "flex:1;min-width:80px;";
+      priceInput.min = "0";
+      priceInput.step = "0.01";
+      const initialPrice =
+        unitPrice ||
+        (itemId
+          ? getItemSellingPrice_(itemId)
+          : select.value
+            ? getItemSellingPrice_(select.value)
+            : 0);
+      priceInput.value = initialPrice;
+      priceInput.required = true;
+
+      // Track user modifications to auto-populated price
+      priceInput.addEventListener("input", markPriceUserModified);
+      priceInput.addEventListener("change", markPriceUserModified);
+
+      // Remove button
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "button button-danger button-small";
+      removeBtn.textContent = "×";
+      removeBtn.style.cssText = "flex:0 0 32px;";
+      removeBtn.addEventListener("click", () => removeSaleItemRow(row));
+
+      row.appendChild(select);
+      row.appendChild(qtyInput);
+      row.appendChild(priceInput);
+      row.appendChild(removeBtn);
+
+      // Update total on input change
+      qtyInput.addEventListener("input", updateSaleTotal);
+      priceInput.addEventListener("input", updateSaleTotal);
+
+      container.appendChild(row);
+
+      // Initialize TomSelect on the select element for searchable dropdown
+      initSaleItemTomSelect_(select);
+    }
+
+    function removeSaleItemRow(row) {
+      const container = document.querySelector("#sale-items-container");
+      if (container.children.length <= 1) {
+        toast("At least one item is required.", "warning");
+        return;
+      }
+      row.remove();
+      updateSaleTotal();
+    }
+
+    function updateSaleTotal() {
+      const container = document.querySelector("#sale-items-container");
+      const rows = container.querySelectorAll(".sale-item-row");
+      let total = 0;
+
+      rows.forEach((row) => {
+        const qtyInput = row.querySelector(".sale-qty-input");
+        const priceInput = row.querySelector(".sale-price-input");
+        const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
+        const price = parseFloat(priceInput ? priceInput.value : 0) || 0;
+        total += qty * price;
+      });
+
+      const totalDisplay = document.querySelector("#sale-total-amount-display");
+      if (totalDisplay) {
+        totalDisplay.value = formatters.currency.format(total);
+      }
+    }
+
+    function handleSaleFormSubmit(event) {
+      event.preventDefault();
+
+      const form = event.currentTarget;
+      const saleId = document.querySelector(selectors.saleIdInput).value;
+
+      // Collect items from DOM rows
+      const container = document.querySelector("#sale-items-container");
+      const rows = container.querySelectorAll(".sale-item-row");
+      const items = [];
+
+      rows.forEach((row) => {
+        const select = row.querySelector(".sale-item-select");
+        const qtyInput = row.querySelector(".sale-qty-input");
+        const priceInput = row.querySelector(".sale-price-input");
+
+        const itemId = select ? select.value : "";
+        const quantity = parseInt(qtyInput ? qtyInput.value : 0, 10) || 0;
+        const unitPrice = parseFloat(priceInput ? priceInput.value : 0) || 0;
+
+        if (itemId && quantity > 0) {
+          items.push({
+            itemId: itemId,
+            quantity: quantity,
+            unitPrice: unitPrice,
+            totalPrice: quantity * unitPrice,
+          });
+        }
+      });
+
+      const payload = {
+        items: items,
+        customerName: form.elements.customerName
+          ? form.elements.customerName.value
+          : "",
+        customerPhone: form.elements.customerPhone
+          ? form.elements.customerPhone.value
+          : "",
+        saleDate: form.elements.saleDate ? form.elements.saleDate.value : "",
+        paymentMethod: form.elements.paymentMethod
+          ? form.elements.paymentMethod.value
+          : "Cash",
+        status: form.elements.status ? form.elements.status.value : "Completed",
+        notes: form.elements.notes ? form.elements.notes.value : "",
+        createdBy: "System",
+      };
+
+      if (!validateSaleForm(payload)) {
+        return;
+      }
+
+      showLoading(true);
+      serverCall(
+        saleId ? "updateSale" : "createSale",
+        ...(saleId
+          ? [saleId, payload, state.sessionToken]
+          : [payload, state.sessionToken]),
+      )
+        .then((response) => {
+          applySalesData(response.data);
+          closeSaleModal();
+          toast(saleId ? "Sale updated." : "Sale created.", "success");
+        })
+        .catch((error) => {
+          setText(
+            selectors.saleFormError,
+            error.message || "Unable to save sale.",
+          );
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function validateSaleForm(payload) {
+      let message = "";
+
+      if (!payload.items || !payload.items.length) {
+        message = "At least one item is required.";
+      } else {
+        for (let i = 0; i < payload.items.length; i++) {
+          const item = payload.items[i];
+          if (!item.itemId) {
+            message = `Item #${i + 1}: Select an item.`;
+            break;
+          }
+          if (item.quantity <= 0) {
+            message = `Item #${i + 1}: Quantity must be greater than zero.`;
+            break;
+          }
+          if (item.unitPrice < 0) {
+            message = `Item #${i + 1}: Unit price cannot be negative.`;
+            break;
+          }
+        }
+      }
+
+      if (!message && !payload.customerName.trim()) {
+        message = "Customer name is required.";
+      } else if (!message && !payload.saleDate) {
+        message = "Sale date is required.";
+      }
+
+      setText(selectors.saleFormError, message);
+      return !message;
+    }
+
+    function printInvoice(saleId) {
+      if (!saleId) {
+        toast("Save the sale first before printing.", "warning");
+        return;
+      }
+
+      showLoading(true);
+      serverCall("printSaleInvoice", saleId, state.sessionToken)
+        .then((response) => {
+          if (response && response.data && response.data.html) {
+            const printWindow = window.open(
+              "",
+              "_blank",
+              "width=800,height=600",
+            );
+            if (printWindow) {
+              printWindow.document.write(response.data.html);
+              printWindow.document.close();
+              printWindow.focus();
+              printWindow.print();
+            } else {
+              toast("Please allow pop-ups to print the invoice.", "error");
+            }
+          } else {
+            toast("Unable to generate invoice.", "error");
+          }
+        })
+        .catch((error) => {
+          toast(error.message || "Unable to print invoice.", "error");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function closeSaleInvoiceModal() {
+      const modal = document.querySelector("#sale-invoice-modal");
+      if (modal) {
+        modal.classList.remove("active");
+        modal.setAttribute("aria-hidden", "true");
+      }
+    }
+
+    function deleteSaleRecord(saleId) {
+      confirm(
+        "Delete this sale? This will restore the stock by the recorded quantity.",
+      ).then((confirmed) => {
+        if (!confirmed) {
+          return;
+        }
+
+        showLoading(true);
+        serverCall("deleteSale", saleId, state.sessionToken)
+          .then((response) => {
+            applySalesData(response.data);
+            toast("Sale deleted.", "success");
+          })
+          .catch((error) => {
+            toast(error.message || "Unable to delete sale.", "error");
+          })
+          .finally(() => showLoading(false));
+      });
+    }
+
+    function bindReportsModule() {
+      document.querySelectorAll(selectors.reportsSegments).forEach((button) => {
+        button.addEventListener("click", () => {
+          const reportType = button.dataset.reportType;
+          if (!reportType) {
+            return;
+          }
+
+          state.reports.page = 1;
+          setActiveReportType(reportType);
+          toggleReportsDateFilters(reportType);
+          loadReports(reportType);
+        });
+      });
+
+      document
+        .querySelectorAll(selectors.reportsExportButtons)
+        .forEach((button) => {
+          button.addEventListener("click", () => {
+            const format = button.dataset.reportExport;
+            exportCurrentReport(format);
+          });
+        });
+
+      const searchInput = document.querySelector(selectors.reportsSearch);
+      searchInput.addEventListener(
+        "input",
+        debounce((event) => {
+          state.reports.query = event.target.value.trim().toLowerCase();
+          state.reports.page = 1;
+          renderReports();
+        }, 200),
+      );
+
+      document
+        .querySelector(selectors.reportsDateFrom)
+        .addEventListener("change", handleReportsDateChange);
+      document
+        .querySelector(selectors.reportsDateTo)
+        .addEventListener("change", handleReportsDateChange);
+      document
+        .querySelector(selectors.reportsClearDates)
+        .addEventListener("click", clearReportsDates);
+
+      document
+        .querySelector(selectors.reportsPrev)
+        .addEventListener("click", () => {
+          state.reports.page = Math.max(state.reports.page - 1, 1);
+          renderReports();
+        });
+
+      document
+        .querySelector(selectors.reportsNext)
+        .addEventListener("click", () => {
+          const totalPages = getReportsTotalPages();
+          state.reports.page = Math.min(state.reports.page + 1, totalPages);
+          renderReports();
+        });
+    }
+
+    function handleReportsDateChange() {
+      const reportType = state.reports.currentType || "sales";
+
+      if (reportType !== "sales" && reportType !== "purchases") {
+        return;
+      }
+
+      state.reports.dateFrom = document.querySelector(
+        selectors.reportsDateFrom,
+      ).value;
+      state.reports.dateTo = document.querySelector(
+        selectors.reportsDateTo,
+      ).value;
+      state.reports.page = 1;
+      loadReports(reportType, { force: true });
+    }
+
+    function clearReportsDates() {
+      state.reports.dateFrom = "";
+      state.reports.dateTo = "";
+      document.querySelector(selectors.reportsDateFrom).value = "";
+      document.querySelector(selectors.reportsDateTo).value = "";
+      state.reports.page = 1;
+      loadReports(
+        state.reports.currentType ||
+          getDefaultReportTypeForRole(state.user && state.user.role),
+        { force: true },
+      );
+    }
+
+    function toggleReportsDateFilters(reportType) {
+      const dateFilters = document.querySelector(selectors.reportsDateFilters);
+      const supportsDates =
+        reportType === "sales" || reportType === "purchases";
+      dateFilters.hidden = !supportsDates;
+    }
+
+    function getReportFilters() {
+      return {
+        dateFrom: state.reports.dateFrom || "",
+        dateTo: state.reports.dateTo || "",
+      };
+    }
+
+    function setActiveReportType(reportType) {
+      document.querySelectorAll(selectors.reportsSegments).forEach((button) => {
+        button.classList.toggle(
+          "active",
+          button.dataset.reportType === reportType,
+        );
+      });
+    }
+
+    function ensureReportsMeta() {
+      if (state.reports.metaLoaded) {
+        return Promise.resolve();
+      }
+
+      return serverCall("getReportsPageMeta", state.sessionToken)
+        .then((response) => {
+          const meta = response && response.data ? response.data : {};
+          state.reports.metaLoaded = true;
+
+          if (meta.defaultPageSize) {
+            state.reports.pageSize = meta.defaultPageSize;
+          }
+
+          if (Array.isArray(meta.reportTypes) && meta.reportTypes.length) {
+            document
+              .querySelectorAll(selectors.reportsSegments)
+              .forEach((button) => {
+                button.hidden = !meta.reportTypes.includes(
+                  button.dataset.reportType,
+                );
+              });
+            if (!meta.reportTypes.includes(state.reports.currentType)) {
+              state.reports.currentType = meta.reportTypes[0];
+            }
+          }
+        })
+        .catch(() => {
+          state.reports.metaLoaded = true;
+        });
+    }
+
+    function loadReports(reportType = state.reports.currentType, options = {}) {
+      const requestedType =
+        reportType ||
+        getDefaultReportTypeForRole(state.user && state.user.role);
+      const type = isReportTypeAllowedForRole(
+        requestedType,
+        state.user && state.user.role,
+      )
+        ? requestedType
+        : getDefaultReportTypeForRole(state.user && state.user.role);
+      const filters = getReportFilters();
+
+      if (
+        state.reports.loaded &&
+        state.reports.currentType === type &&
+        state.reports.dateFrom === filters.dateFrom &&
+        state.reports.dateTo === filters.dateTo &&
+        !options.force
+      ) {
+        renderReports();
+        return;
+      }
+
+      showLoading(true);
+
+      ensureReportsMeta()
+        .then(() =>
+          serverCall("getReportsData", type, filters, state.sessionToken),
+        )
+        .then((response) => {
+          state.reports.loaded = true;
+          state.reports.currentType = type;
+          state.reports.data = response && response.data ? response.data : null;
+          state.reports.page = 1;
+          setActiveReportType(type);
+          toggleReportsDateFilters(type);
+          renderReports();
+        })
+        .catch((error) => {
+          toast(error.message || "Unable to load reports.", "error");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function getFilteredReportRows() {
+      const report = state.reports.data || {};
+      const rows = report.rows || [];
+      const query = state.reports.query;
+
+      if (!query) {
+        return rows;
+      }
+
+      return rows.filter((row) => row.join(" ").toLowerCase().includes(query));
+    }
+
+    function getReportsTotalPages(filteredRows = getFilteredReportRows()) {
+      return Math.max(
+        Math.ceil(filteredRows.length / state.reports.pageSize),
+        1,
+      );
+    }
+
+    function getReportsPaginationSummary(total, start, count) {
+      if (!total) {
+        return "Showing 0 records";
+      }
+
+      return `Showing ${start + 1}-${start + count} of ${total} records`;
+    }
+
+    function getReportRecordLabel(reportType) {
+      if (reportType === "purchases") {
+        return "purchase records";
+      }
+
+      if (reportType === "lowstock") {
+        return "low stock items";
+      }
+
+      if (reportType === "sales") {
+        return "sale records";
+      }
+
+      return "records";
+    }
+
+    function renderReports() {
+      const report = state.reports.data || {};
+      const reportType =
+        report.reportType || state.reports.currentType || "sales";
+      const title = report.title || "Sales Report";
+      const summaryLabel = report.summaryLabel || "Summary";
+      const summaryValue =
+        report.summaryValueDisplay != null
+          ? report.summaryValueDisplay
+          : report.summaryValue != null
+            ? report.summaryValue
+            : "";
+      const columns = report.columns || [];
+      const filteredRows = getFilteredReportRows();
+      const totalPages = getReportsTotalPages(filteredRows);
+
+      state.reports.page = Math.min(
+        Math.max(state.reports.page, 1),
+        totalPages,
+      );
+
+      const start = (state.reports.page - 1) * state.reports.pageSize;
+      const pageRows = filteredRows.slice(
+        start,
+        start + state.reports.pageSize,
+      );
+
+      const tableWrapper = document.querySelector(
+        selectors.reportsTableWrapper,
+      );
+      const status = document.querySelector(selectors.reportsStatus);
+      const thead = document.querySelector(selectors.reportsTableHead);
+      const tbody = document.querySelector(selectors.reportsTableBody);
+      const pagination = document.querySelector(selectors.reportsPagination);
+
+      setText(selectors.reportsTitle, title);
+      setText(
+        selectors.reportsCount,
+        `${filteredRows.length} ${getReportRecordLabel(reportType)}`,
+      );
+      setText(selectors.reportsSummary, `${summaryLabel}: ${summaryValue}`);
+
+      if (!columns.length) {
+        status.textContent = "No report columns configured.";
+        tableWrapper.hidden = true;
+        pagination.hidden = true;
+        return;
+      }
+
+      status.textContent = filteredRows.length
+        ? `${filteredRows.length} ${filteredRows.length === 1 ? "record" : "records"} matched your filters.`
+        : "No report data found for the selected filters.";
+
+      tableWrapper.hidden = false;
+      thead.innerHTML = "";
+
+      const headerRow = document.createElement("tr");
+      columns.forEach((column) => {
+        const th = document.createElement("th");
+        th.textContent = column;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+
+      tbody.innerHTML = "";
+
+      if (!pageRows.length) {
+        tbody.appendChild(
+          createEmptyRow(columns.length, "No matching records found."),
+        );
+      } else {
+        pageRows.forEach((row) => {
+          const tr = document.createElement("tr");
+          row.forEach((cell) => {
+            appendCell(tr, cell == null ? "" : cell);
+          });
+          tbody.appendChild(tr);
+        });
+      }
+
+      pagination.hidden = totalPages <= 1;
+      pagination.style.display = totalPages > 1 ? "flex" : "none";
+      setText(
+        selectors.reportsPaginationSummary,
+        getReportsPaginationSummary(
+          filteredRows.length,
+          start,
+          pageRows.length,
+        ),
+      );
+      document.querySelector(selectors.reportsPrev).disabled =
+        state.reports.page <= 1;
+      document.querySelector(selectors.reportsNext).disabled =
+        state.reports.page >= totalPages;
+    }
+
+    function downloadExportFile(data) {
+      if (!data) {
+        return;
+      }
+
+      if (data.contentBase64) {
+        const binary = atob(data.contentBase64);
+        const bytes = new Uint8Array(binary.length);
+
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+
+        const blob = new Blob([bytes], {
+          type: data.mimeType || "application/octet-stream",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = data.fileName || "report";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      if (data.fileUrl) {
+        window.open(data.fileUrl, "_blank", "noopener,noreferrer");
+      }
+    }
+
+    function exportCurrentReport(format = "pdf") {
+      const reportType = state.reports.currentType || "sales";
+      const filters = getReportFilters();
+
+      showLoading(true);
+      serverCall(
+        "exportReport",
+        reportType,
+        format,
+        filters,
+        state.sessionToken,
+      )
+        .then((response) => {
+          const data = response && response.data ? response.data : {};
+          downloadExportFile(data);
+          toast(
+            `${String(format || "pdf").toUpperCase()} export downloaded.`,
+            "success",
+          );
+        })
+        .catch((error) => {
+          toast(error.message || "Unable to export report.", "error");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    /* ================================================================
+       INVENTORY MODULE
+       ================================================================ */
+
+    function bindInventoryModule() {
+      const searchInput = document.querySelector("[data-inventory-search]");
+      const filterSelect = document.querySelector("[data-inventory-filter]");
+      const expiryDaysInput = document.querySelector(
+        "[data-inventory-expiry-days]",
+      );
+      const prevBtn = document.querySelector("[data-inventory-prev]");
+      const nextBtn = document.querySelector("[data-inventory-next]");
+
+      if (searchInput) {
+        searchInput.addEventListener(
+          "input",
+          debounce((event) => {
+            state.inventory.query = event.target.value.trim().toLowerCase();
+            state.inventory.page = 1;
+            renderInventory();
+          }, 200),
+        );
+      }
+
+      if (filterSelect) {
+        filterSelect.addEventListener("change", (event) => {
+          state.inventory.filter = event.target.value;
+          state.inventory.page = 1;
+          renderInventory();
+        });
+      }
+
+      if (expiryDaysInput) {
+        expiryDaysInput.addEventListener(
+          "input",
+          debounce(() => {
+            state.inventory.expiryWarningDays =
+              parseInt(expiryDaysInput.value, 10) || 30;
+            state.inventory.page = 1;
+            renderInventory();
+          }, 150),
+        );
+      }
+
+      if (prevBtn) {
+        prevBtn.addEventListener("click", () => {
+          if (state.inventory.page > 1) {
+            state.inventory.page--;
+            renderInventory();
+          }
+        });
+      }
+
+      if (nextBtn) {
+        nextBtn.addEventListener("click", () => {
+          state.inventory.page++;
+          renderInventory();
+        });
+      }
+
+      // Initial render after navigation
+      if (!state.inventory.loaded) {
+        loadInventory();
+      }
+    }
+
+    function loadInventory(options = {}) {
+      if (state.inventory.loaded && !options.force) {
+        renderInventory();
+        return;
+      }
+
+      showLoading(true);
+      serverCall("getInventory", state.sessionToken)
+        .then((response) => {
+          applyInventoryData(response.data || {});
+          toast("Inventory loaded.", "success");
+        })
+        .catch((error) => {
+          toast(error.message || "Unable to load inventory.", "error");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function applyInventoryData(data) {
+      state.inventory.summary = data.summary || [];
+      state.inventory.batches = data.batches || [];
+      state.inventory.expiryWarningDays =
+        parseInt(data.expiryWarningDays, 10) || 30;
+      state.inventory.loaded = true;
+      state.inventory.batchCache = {};
+      renderInventory();
+    }
+
+    function renderInventory() {
+      renderInventorySummary();
+    }
+
+    function resetInventoryBatches_() {
+      const tbody = document.querySelector("#inventory-batch-tbody");
+      const countEl = document.querySelector("#inventory-batch-count");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+      tbody.appendChild(
+        createEmptyRow(5, "Select a medicine to view batches."),
+      );
+      if (countEl) countEl.textContent = "—";
+    }
+
+    function renderInventorySummary() {
+      const tbody = document.querySelector("#inventory-summary-tbody");
+      const countEl = document.querySelector("#inventory-summary-count");
+      const paginationEl = document.querySelector("#inventory-pagination");
+      const summaryEl = document.querySelector("#inventory-pagination-summary");
+      const prevBtn = document.querySelector("[data-inventory-prev]");
+      const nextBtn = document.querySelector("[data-inventory-next]");
+
+      if (!tbody) return;
+
+      const query = (state.inventory.query || "").trim();
+      const filter = state.inventory.filter || "all";
+
+      const enriched = (state.inventory.summary || []).map((row) => {
+        return Object.assign({}, row, {
+          status:
+            row.currentStock <= 0 || row.currentStock <= row.minimumStock
+              ? "Low"
+              : "OK",
+        });
+      });
+
+      const filtered = enriched.filter((row) => {
+        const t = `${row.itemId} ${row.name} ${row.category}`.toLowerCase();
+        const matchesQuery = !query || t.includes(query);
+        let matchesFilter = true;
+        if (filter === "low") {
+          matchesFilter = row.currentStock <= row.minimumStock;
+        } else if (filter === "expired") {
+          matchesFilter =
+            typeof row.nearestExpiryDays === "number" &&
+            row.nearestExpiryDays < 0;
+        } else if (filter === "expiring") {
+          matchesFilter =
+            typeof row.nearestExpiryDays === "number" &&
+            row.nearestExpiryDays >= 0 &&
+            row.nearestExpiryDays <= state.inventory.expiryWarningDays;
+        }
+        return matchesQuery && matchesFilter;
+      });
+
+      const total = filtered.length;
+      const pageSize = state.inventory.pageSize || 10;
+      const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+
+      if (state.inventory.page > totalPages) state.inventory.page = totalPages;
+      if (state.inventory.page < 1) state.inventory.page = 1;
+
+      const startIndex = (state.inventory.page - 1) * pageSize;
+      const pageItems = filtered.slice(startIndex, startIndex + pageSize);
+
+      tbody.innerHTML = "";
+
+      if (!pageItems.length) {
+        tbody.appendChild(createEmptyRow(6, "No inventory summary found."));
+      } else {
+        pageItems.forEach((row) => {
+          const isExpanded = state.inventory.expandedMedicineId === row.itemId;
+
+          // Main medicine row
+          const tr = document.createElement("tr");
+          tr.dataset.medicineId = row.itemId;
+          if (isExpanded) {
+            tr.classList.add("inventory-row-expanded");
+          }
+
+          // Expand/collapse affordance
+          const firstCell = document.createElement("td");
+          firstCell.style.display = "flex";
+          firstCell.style.alignItems = "center";
+          firstCell.style.gap = "10px";
+
+          const caret = document.createElement("span");
+          caret.className = "inventory-caret";
+          caret.textContent = isExpanded ? "▾" : "▸";
+
+          const label = document.createElement("span");
+          label.textContent = row.name || row.itemId;
+          label.style.fontWeight = "600";
+
+          firstCell.appendChild(caret);
+          firstCell.appendChild(label);
+          tr.appendChild(firstCell);
+
+          appendCell(tr, row.category || "-", "");
+          appendCell(
+            tr,
+            formatters.number.format(row.currentStock || 0),
+            "numeric-cell",
+          );
+          appendCell(
+            tr,
+            formatters.number.format(row.minimumStock || 0),
+            "numeric-cell",
+          );
+          appendCell(
+            tr,
+            row.nearestExpiryDate ? formatDate(row.nearestExpiryDate) : "-",
+          );
+
+          const badge = document.createElement("span");
+          badge.className = "status-badge";
+          const st = row.nearestExpiryStatus || "OK";
+          if (st === "Expired") badge.classList.add("status-danger");
+          else if (st === "Expiring") badge.classList.add("status-warning");
+          else badge.classList.add("status-active");
+          badge.textContent = st;
+
+          const td = document.createElement("td");
+          td.appendChild(badge);
+          tr.appendChild(td);
+
+          tr.addEventListener("click", () => {
+            toggleInventoryMedicine_(row.itemId, row.name);
+          });
+
+          tbody.appendChild(tr);
+
+          // If expanded, render a full-width detail row immediately below
+          if (isExpanded) {
+            const detailTr = document.createElement("tr");
+            detailTr.className = "inventory-detail-row";
+            const detailTd = document.createElement("td");
+            detailTd.colSpan = 6;
+            detailTd.style.padding = "0";
+
+            const wrap = document.createElement("div");
+            wrap.className = "inventory-detail-wrap";
+            wrap.innerHTML = `
+              <div class="inventory-detail-loading" style="padding: 16px; color: var(--muted)">Loading batches…</div>
+              <div class="inventory-detail-table" style="display:none"></div>
+            `;
+
+            detailTd.appendChild(wrap);
+            detailTr.appendChild(detailTd);
+            tbody.appendChild(detailTr);
+
+            // Kick off lazy load with client-side caching
+            loadInventoryBatchesForMedicineIntoCell_(
+              row.itemId,
+              row.name,
+              wrap,
+            );
+          }
+        });
+      }
+
+      if (countEl) {
+        countEl.textContent = `${total} item${total === 1 ? "" : "s"}`;
+      }
+
+      if (paginationEl) {
+        if (total === 0) {
+          paginationEl.style.display = "none";
+        } else {
+          paginationEl.style.display = "flex";
+          if (summaryEl) {
+            const count = pageItems.length;
+            summaryEl.textContent = `Showing ${startIndex + 1}-${startIndex + count} of ${total} items`;
+          }
+          if (prevBtn) prevBtn.disabled = state.inventory.page <= 1;
+          if (nextBtn) nextBtn.disabled = state.inventory.page >= totalPages;
+        }
+      }
+    }
+
+    async function toggleInventoryMedicine_(
+      medicineId,
+      medicineName,
+      options = {},
+    ) {
+      const shouldSilent = options && options.silent;
+
+      // Collapse if clicking same medicine.
+      if (state.inventory.expandedMedicineId === medicineId) {
+        state.inventory.expandedMedicineId = null;
+        state.inventory.expandedMedicineName = null;
+        if (!shouldSilent) renderInventory();
+        return;
+      }
+
+      // Expand new medicine (only one at a time)
+      state.inventory.expandedMedicineId = medicineId;
+      state.inventory.expandedMedicineName = medicineName;
+
+      if (!shouldSilent) renderInventory();
+    }
+
+    function renderInventoryBatchesIntoCell_(batches, wrapEl) {
+      if (!wrapEl) return;
+
+      const loadingEl = wrapEl.querySelector(".inventory-detail-loading");
+      const tableHost = wrapEl.querySelector(".inventory-detail-table");
+      if (!tableHost) return;
+
+      if (loadingEl) loadingEl.style.display = "none";
+      tableHost.style.display = "block";
+      tableHost.innerHTML = "";
+
+      if (!batches || !batches.length) {
+        tableHost.innerHTML = `
+          <div style="padding: 16px; color: var(--muted)">No batch details recorded for this medicine.</div>
+        `;
+        return;
+      }
+
+      const rowsHtml = batches
+        .map((b) => {
+          const exp = b.expiryDate ? formatDate(b.expiryDate) : "-";
+          const rem = formatters.number.format(b.remainingQuantity || 0);
+          const cost = formatters.currency.format(b.costPrice || 0);
+          const sell = formatters.currency.format(b.sellingPrice || 0);
+          return `
+            <tr>
+              <td><strong style="color: var(--primary, #2563eb);">${b.batchNumber || "-"}</strong></td>
+              <td class="numeric-cell">${rem}</td>
+              <td>${exp}</td>
+              <td class="numeric-cell">${cost}</td>
+              <td class="numeric-cell">${sell}</td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      tableHost.innerHTML = `
+        <div style="padding: 14px 16px 16px">
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--border, #e2e8f0); color: var(--muted, #64748b);">
+                <th style="text-align: left; padding: 6px 8px;">Batch Number</th>
+                <th class="numeric-cell" style="padding: 6px 8px;">Remaining Qty</th>
+                <th style="text-align: left; padding: 6px 8px;">Expiry Date</th>
+                <th class="numeric-cell" style="padding: 6px 8px;">Cost Price</th>
+                <th class="numeric-cell" style="padding: 6px 8px;">Selling Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    async function loadInventoryBatchesForMedicineIntoCell_(
+      medicineId,
+      medicineName,
+      wrapEl,
+    ) {
+      if (!wrapEl) return;
+
+      // Check client-side batch cache first for instantaneous expand!
+      if (!state.inventory.batchCache) {
+        state.inventory.batchCache = {};
+      }
+
+      if (state.inventory.batchCache[medicineId]) {
+        renderInventoryBatchesIntoCell_(
+          state.inventory.batchCache[medicineId],
+          wrapEl,
+        );
+        return;
+      }
+
+      serverCall("getMedicineBatches", medicineId, state.sessionToken)
+        .then((response) => {
+          const batches =
+            response && response.data && response.data.batches
+              ? response.data.batches
+              : [];
+          state.inventory.batchCache[medicineId] = batches;
+          renderInventoryBatchesIntoCell_(batches, wrapEl);
+        })
+        .catch(() => {
+          state.inventory.batchCache[medicineId] = [];
+          renderInventoryBatchesIntoCell_([], wrapEl);
+        });
+    }
+
+    function destroyTomSelectIfExists_(el) {
+      if (!el) return;
+      if (el.tomselect) {
+        try {
+          el.tomselect.destroy();
+        } catch (e) {}
+        el.tomselect = null;
+      }
+    }
+
+    function initPurchaseItemTomSelect_() {
+      const itemSelect = document.querySelector(selectors.purchaseItemInput);
+      if (!itemSelect) return;
+
+      // If TomSelect already exists on this element, skip re-initialization
+      if (itemSelect.tomselect) {
+        return;
+      }
+
+      // If TomSelect library is not loaded, fall back to native select
+      if (typeof TomSelect === "undefined") {
+        console.warn(
+          "TomSelect library is not loaded. Searchable dropdown will not work for purchases.",
+        );
+        return;
+      }
+
+      // Collect current options from the select element
+      const options = [];
+      for (let i = 0; i < itemSelect.options.length; i++) {
+        const opt = itemSelect.options[i];
+        if (opt.value) {
+          options.push({
+            value: opt.value,
+            text: opt.textContent,
+          });
+        }
+      }
+
+      // Store the currently selected value before TomSelect replaces the DOM
+      const currentValue = itemSelect.value;
+
+      // Create TomSelect instance with search capability
+      const ts = new TomSelect(itemSelect, {
+        options: options,
+        create: false,
+        maxItems: 1,
+        placeholder: "Search for an item...",
+        sortField: {
+          field: "text",
+          direction: "asc",
+        },
+        searchField: ["text"],
+        render: {
+          option: function (data, escape) {
+            return (
+              '<div class="ts-option-purchase">' + escape(data.text) + "</div>"
+            );
+          },
+          item: function (data, escape) {
+            return (
+              '<div class="ts-item-purchase">' + escape(data.text) + "</div>"
+            );
+          },
+        },
+      });
+
+      // Restore the selected value
+      if (currentValue) {
+        ts.setValue(currentValue, true);
+      }
+
+      // Store reference on the element for cleanup
+      itemSelect.tomselect = ts;
+    }
+
+    function bindSettingsModule() {
+      document
+        .querySelector(selectors.settingsSaveBtn)
+        .addEventListener("click", handleSettingsSave);
+
+      document
+        .querySelector(selectors.settingsResetBtn)
+        .addEventListener("click", handleSettingsReset);
+
+      // Live logo preview
+      document
+        .querySelector(selectors.settingsLogoUrl)
+        .addEventListener("input", updateLogoPreview);
+
+      // Live tax preview
+      document
+        .querySelector(selectors.settingsCurrencySymbol)
+        .addEventListener("input", updateTaxPreview);
+      document
+        .querySelector(selectors.settingsTaxLabel)
+        .addEventListener("input", updateTaxPreview);
+      document
+        .querySelector(selectors.settingsTaxRate)
+        .addEventListener("input", updateTaxPreview);
+    }
+
+    function loadSettings(options = {}) {
+      if (state.settings.loaded && !options.force) {
+        return;
+      }
+
+      showLoading(true);
+      serverCall("getSettings", state.sessionToken)
+        .then((response) => {
+          applySettingsData(response.data || {});
+        })
+        .catch((error) => {
+          toast(error.message || "Unable to load settings.", "error");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function applySettingsData(data) {
+      state.settings.data = data || {};
+      state.settings.loaded = true;
+
+      const d = state.settings.data;
+
+      setInputValue(selectors.settingsCompanyName, d.companyName);
+      setInputValue(selectors.settingsCompanyEmail, d.companyEmail);
+      setInputValue(selectors.settingsCompanyPhone, d.companyPhone);
+      setInputValue(selectors.settingsCompanyAddress, d.companyAddress);
+      setInputValue(selectors.settingsLogoUrl, d.logoUrl);
+      setInputValue(selectors.settingsInvoicePrefix, d.invoicePrefix);
+      setInputValue(selectors.settingsInvoiceNextNo, d.invoiceNextNo);
+      setSelectValue(selectors.settingsCurrency, d.currency);
+      setInputValue(selectors.settingsCurrencySymbol, d.currencySymbol);
+      setInputValue(selectors.settingsTaxLabel, d.taxLabel);
+      setInputValue(selectors.settingsTaxRate, d.taxRate);
+      setSelectValue(selectors.settingsTimezone, d.timezone);
+      setSelectValue(selectors.settingsDateFormat, d.dateFormat);
+      setSelectValue(selectors.settingsLanguage, d.language);
+
+      // Checkboxes
+      const lowStock = document.querySelector(selectors.settingsLowStockAlert);
+      if (lowStock) {
+        lowStock.checked =
+          d.lowStockAlert === "true" || d.lowStockAlert === true;
+      }
+      const dark = document.querySelector(selectors.settingsDarkMode);
+      if (dark) {
+        dark.checked = d.darkMode === "true" || d.darkMode === true;
+        document.body.classList.toggle("dark-mode", dark.checked);
+      }
+
+      updateLogoPreview();
+      updateTaxPreview();
+    }
+
+    function collectSettingsPayload() {
+      const lowStock = document.querySelector(selectors.settingsLowStockAlert);
+      const dark = document.querySelector(selectors.settingsDarkMode);
+
+      return {
+        companyName: getInputValue(selectors.settingsCompanyName),
+        companyEmail: getInputValue(selectors.settingsCompanyEmail),
+        companyPhone: getInputValue(selectors.settingsCompanyPhone),
+        companyAddress: getInputValue(selectors.settingsCompanyAddress),
+        logoUrl: getInputValue(selectors.settingsLogoUrl),
+        invoicePrefix: getInputValue(selectors.settingsInvoicePrefix),
+        invoiceNextNo: getInputValue(selectors.settingsInvoiceNextNo),
+        currency: getSelectValue(selectors.settingsCurrency),
+        currencySymbol: getInputValue(selectors.settingsCurrencySymbol),
+        taxLabel: getInputValue(selectors.settingsTaxLabel),
+        taxRate: getInputValue(selectors.settingsTaxRate),
+        timezone: getSelectValue(selectors.settingsTimezone),
+        dateFormat: getSelectValue(selectors.settingsDateFormat),
+        language: getSelectValue(selectors.settingsLanguage),
+        lowStockAlert: lowStock ? String(lowStock.checked) : "true",
+        darkMode: dark ? String(dark.checked) : "false",
+      };
+    }
+
+    function validateSettingsPayload(payload) {
+      const errEl = document.querySelector(selectors.settingsFormError);
+      errEl.textContent = "";
+
+      if (!payload.companyName || payload.companyName.length < 2) {
+        errEl.textContent = "Company name must be at least 2 characters.";
+        return false;
+      }
+      if (!payload.invoicePrefix || payload.invoicePrefix.length < 1) {
+        errEl.textContent = "Invoice prefix is required.";
+        return false;
+      }
+      if (!payload.currency) {
+        errEl.textContent = "Currency is required.";
+        return false;
+      }
+      if (!payload.currencySymbol) {
+        errEl.textContent = "Currency symbol is required.";
+        return false;
+      }
+      const tax = parseFloat(payload.taxRate);
+      if (isNaN(tax) || tax < 0 || tax > 100) {
+        errEl.textContent = "Tax rate must be between 0 and 100.";
+        return false;
+      }
+      return true;
+    }
+
+    function handleSettingsSave() {
+      const payload = collectSettingsPayload();
+      if (!validateSettingsPayload(payload)) {
+        return;
+      }
+
+      showLoading(true);
+      serverCall("saveSettings", payload, state.sessionToken)
+        .then((response) => {
+          applySettingsData(response.data || {});
+          toast("Settings saved successfully.", "success");
+        })
+        .catch((error) => {
+          toast(error.message || "Unable to save settings.", "error");
+        })
+        .finally(() => showLoading(false));
+    }
+
+    function handleSettingsReset() {
+      confirm(
+        "Reset all settings to default values? This cannot be undone.",
+      ).then((ok) => {
+        if (!ok) {
+          return;
+        }
+
+        showLoading(true);
+        serverCall("resetSettings", state.sessionToken)
+          .then((response) => {
+            applySettingsData(response.data || {});
+            toast("Settings reset to defaults.", "success");
+          })
+          .catch((error) => {
+            toast(error.message || "Unable to reset settings.", "error");
+          })
+          .finally(() => showLoading(false));
+      });
+    }
+
+    function updateLogoPreview() {
+      const url = getInputValue(selectors.settingsLogoUrl).trim();
+      const wrap = document.querySelector(selectors.settingsLogoPreviewWrap);
+      const img = document.querySelector(selectors.settingsLogoPreview);
+      if (!wrap || !img) {
+        return;
+      }
+      if (url) {
+        img.src = url;
+        wrap.hidden = false;
+      } else {
+        img.src = "";
+        wrap.hidden = true;
+      }
+    }
+
+    function updateTaxPreview() {
+      const symbol =
+        getInputValue(selectors.settingsCurrencySymbol) || "\u20A8";
+      const taxLabel = getInputValue(selectors.settingsTaxLabel) || "GST";
+      const taxRate = parseFloat(getInputValue(selectors.settingsTaxRate)) || 0;
+      const basePrice = 1000;
+      const taxAmount = (basePrice * taxRate) / 100;
+      const total = basePrice + taxAmount;
+
+      const fmt = (n) =>
+        symbol +
+        " " +
+        n.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+
+      setText(selectors.settingsPreviewPrice, fmt(basePrice));
+      setText(selectors.settingsPreviewTaxLabel, `${taxLabel} (${taxRate}%)`);
+      setText(selectors.settingsPreviewTaxAmount, fmt(taxAmount));
+      setText(selectors.settingsPreviewTotal, fmt(total));
+    }
+
+    /* ---------- Input/Select helpers ---------- */
+    function setInputValue(selector, value) {
+      const el = document.querySelector(selector);
+      if (el) {
+        el.value = value != null ? value : "";
+      }
+    }
+
+    function getInputValue(selector) {
+      const el = document.querySelector(selector);
+      return el ? el.value.trim() : "";
+    }
+
+    function setSelectValue(selector, value) {
+      const el = document.querySelector(selector);
+      if (!el || !value) {
+        return;
+      }
+      for (let i = 0; i < el.options.length; i++) {
+        if (el.options[i].value === value) {
+          el.selectedIndex = i;
+          return;
+        }
+      }
+    }
+
+    function getSelectValue(selector) {
+      const el = document.querySelector(selector);
+      return el ? el.value : "";
+    }
+
+    return {
+      init,
+      navigate,
+      serverCall,
+      showLoading,
+      toast,
+      confirm,
+    };
+  })();
+
+  document.addEventListener("DOMContentLoaded", App.init);
+</script>

@@ -1,0 +1,212 @@
+<section
+  class="page-section"
+  data-page="purchases"
+  data-title="Purchases"
+  data-subtitle="Record supplier purchases and stock increases"
+>
+  <div class="toolbar">
+    <div class="toolbar-search">
+      <label class="sr-only" for="purchases-search">Search purchases</label>
+      <input
+        id="purchases-search"
+        type="search"
+        placeholder="Search purchases"
+        data-purchases-search
+      />
+    </div>
+    <button
+      class="button button-primary"
+      type="button"
+      data-action="open-purchase-modal"
+    >
+      New Purchase
+    </button>
+  </div>
+
+  <article class="card">
+    <div class="card-header">
+      <h2>Purchase Entries</h2>
+      <div class="card-meta">
+        <span id="purchases-count" class="status-pill">0 purchases</span>
+        <span id="purchases-summary" class="muted-text">No purchases yet</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Quantity</th>
+            <th>Unit Price</th>
+            <th>Cost Price</th>
+            <th>Selling Price</th>
+            <th>Total Cost</th>
+            <th>Supplier</th>
+            <th>Purchase Date</th>
+            <th>Batch</th>
+            <th>Expiry</th>
+            <th>Remaining</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="purchases-table-body"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="purchases-pagination">
+      <button
+        class="button button-ghost button-small"
+        type="button"
+        data-purchases-prev
+      >
+        Previous
+      </button>
+      <span id="purchases-pagination-summary">Showing 0 purchases</span>
+      <button
+        class="button button-ghost button-small"
+        type="button"
+        data-purchases-next
+      >
+        Next
+      </button>
+    </div>
+  </article>
+
+  <div
+    class="modal-backdrop"
+    id="purchase-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="purchase-modal-title"
+    aria-hidden="true"
+  >
+    <section class="modal">
+      <div class="modal-header">
+        <h2 id="purchase-modal-title">New Purchase</h2>
+        <button
+          class="icon-button"
+          type="button"
+          data-purchase-modal-close
+          aria-label="Close purchase dialog"
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form id="purchase-form">
+        <input type="hidden" id="purchase-id" name="id" />
+        <div class="field-group">
+          <label for="purchase-item-input">Item</label>
+
+          <select id="purchase-item-input" name="itemId" required></select>
+        </div>
+        <div class="field-group">
+          <label for="purchase-quantity-input">Quantity</label>
+          <input
+            id="purchase-quantity-input"
+            name="quantity"
+            type="number"
+            min="1"
+            step="1"
+            required
+          />
+        </div>
+
+        <div class="field-group field-full">
+          <label for="purchase-unit-price-input">Unit Price</label>
+          <input
+            id="purchase-unit-price-input"
+            name="unitPrice"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+          />
+        </div>
+
+        <div class="field-group">
+          <label for="purchase-cost-price-input">Cost Price</label>
+          <input
+            id="purchase-cost-price-input"
+            name="costPrice"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+          />
+        </div>
+
+        <div class="field-group">
+          <label for="purchase-selling-price-input">Selling Price</label>
+          <input
+            id="purchase-selling-price-input"
+            name="sellingPrice"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+          />
+        </div>
+
+        <div class="field-group">
+          <label for="purchase-total-cost-input">Total Cost</label>
+          <input
+            id="purchase-total-cost-input"
+            name="totalCost"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+          />
+        </div>
+
+        <div class="field-group">
+          <label for="purchase-supplier-input">Supplier</label>
+          <input
+            id="purchase-supplier-input"
+            name="supplier"
+            type="text"
+            required
+          />
+        </div>
+        <div class="field-group">
+          <label for="purchase-batch-input">Batch Number</label>
+          <input id="purchase-batch-input" name="batchNumber" type="text" />
+        </div>
+        <div class="field-group">
+          <label for="purchase-expiry-input">Expiry Date</label>
+          <input
+            id="purchase-expiry-input"
+            name="expiryDate"
+            type="date"
+            required
+          />
+        </div>
+        <div class="field-group">
+          <label for="purchase-date-input">Purchase Date</label>
+          <input
+            id="purchase-date-input"
+            name="purchaseDate"
+            type="date"
+            required
+          />
+        </div>
+        <div class="field-group field-full">
+          <label for="purchase-notes-input">Notes</label>
+          <textarea id="purchase-notes-input" name="notes" rows="3"></textarea>
+        </div>
+        <p id="purchase-form-error" class="form-error" role="alert"></p>
+        <div class="modal-actions field-full">
+          <button
+            class="button button-ghost"
+            type="button"
+            data-purchase-modal-close
+          >
+            Cancel
+          </button>
+          <button class="button button-primary" type="submit">
+            Save Purchase
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+</section>

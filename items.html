@@ -1,0 +1,176 @@
+<section
+  class="page-section"
+  data-page="items"
+  data-title="Items"
+  data-subtitle="Manage products, categories, units, and stock levels"
+>
+  <div class="toolbar">
+    <div class="toolbar-search">
+      <label class="sr-only" for="items-search">Search items</label>
+      <input
+        id="items-search"
+        type="search"
+        placeholder="Search items"
+        data-items-search
+      />
+    </div>
+    <div class="toolbar-filters">
+      <label class="sr-only" for="items-category-filter"
+        >Filter by category</label
+      >
+      <select id="items-category-filter" data-items-category-filter></select>
+    </div>
+    <button
+      class="button button-primary"
+      type="button"
+      data-action="open-item-modal"
+    >
+      New Item
+    </button>
+  </div>
+
+  <article class="card">
+    <div class="card-header">
+      <h2>Inventory Items</h2>
+      <span class="status-pill" id="items-count">0 items</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Quantity</th>
+            <th>Manufacturer</th>
+            <th>Location</th>
+            <th>Status</th>
+            <th class="actions-column">Actions</th>
+          </tr>
+        </thead>
+
+        <tbody id="items-table-body">
+          <tr>
+            <td colspan="10" class="table-empty">No inventory items found.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination-bar" id="items-pagination" style="display: none">
+      <span id="items-pagination-summary">Showing 0 items</span>
+      <div class="pagination-actions">
+        <button class="button button-ghost" type="button" data-items-prev>
+          Previous
+        </button>
+        <button class="button button-ghost" type="button" data-items-next>
+          Next
+        </button>
+      </div>
+    </div>
+  </article>
+</section>
+
+<div
+  id="item-modal"
+  class="modal-backdrop module-modal"
+  role="presentation"
+  aria-hidden="true"
+>
+  <section
+    class="modal modal-wide"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="item-modal-title"
+  >
+    <form id="item-form">
+      <div class="modal-header">
+        <h2 id="item-modal-title">New Item</h2>
+        <button
+          class="icon-button"
+          type="button"
+          data-item-modal-close
+          aria-label="Close item form"
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <input type="hidden" id="item-id" name="id" />
+
+      <div class="form-grid three-field-grid">
+        <label>
+          Name <span class="required">*</span>
+          <input id="item-name-input" name="name" type="text" required />
+        </label>
+        <label>
+          Category <span class="required">*</span>
+          <select id="item-category-input" name="category" required></select>
+        </label>
+        <label>
+          Unit <span class="required">*</span>
+          <select id="item-unit-input" name="unit" required></select>
+        </label>
+
+        <label>
+          Image URL
+          <input id="item-image-input" name="imageUrl" type="url" />
+        </label>
+
+        <label style="grid-column: 1 / -1">
+          Description
+          <textarea
+            id="item-description-input"
+            name="description"
+            rows="3"
+          ></textarea>
+        </label>
+
+        <label>
+          Status <span class="required">*</span>
+          <select id="item-status-input" name="status" required>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </label>
+
+        <label>
+          Manufacturer (Optional)
+          <input
+            id="item-manufacturer-input"
+            name="manufacturer"
+            type="text"
+            placeholder="e.g. Pfizer"
+          />
+        </label>
+        <label>
+          Minimum Stock <span class="required">*</span>
+          <input
+            id="item-minimum-stock-input"
+            name="minimumStock"
+            type="number"
+            min="0"
+            step="1"
+            value="1"
+            required
+          />
+        </label>
+        <label>
+          Shelf Location (Optional)
+          <input
+            id="item-shelf-location-input"
+            name="shelfLocation"
+            type="text"
+            placeholder="e.g. Aisle 3, Shelf B"
+          />
+        </label>
+      </div>
+
+      <div class="form-error" id="item-form-error" role="alert"></div>
+
+      <div class="modal-actions">
+        <button class="button button-ghost" type="button" data-item-modal-close>
+          Cancel
+        </button>
+        <button class="button button-primary" type="submit">Save Item</button>
+      </div>
+    </form>
+  </section>
+</div>

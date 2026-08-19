@@ -1,0 +1,90 @@
+<section
+  class="page-section"
+  data-page="inventory"
+  data-title="Inventory"
+  data-subtitle="Automatic stock overview by medicine and batch"
+>
+  <div class="toolbar">
+    <div class="toolbar-search">
+      <label class="sr-only" for="inventory-search">Search inventory</label>
+      <input
+        id="inventory-search"
+        type="search"
+        placeholder="Search medicine / batch..."
+        data-inventory-search
+      />
+    </div>
+    <div class="toolbar-filters">
+      <label class="sr-only" for="inventory-filter">Filter</label>
+      <select id="inventory-filter" data-inventory-filter>
+        <option value="all">All Items</option>
+        <option value="low">Low Stock</option>
+        <option value="expired">Expired Batches</option>
+        <option value="expiring">Expiring Soon</option>
+      </select>
+
+      <div
+        class="field-inline"
+        style="display: flex; align-items: center; gap: 8px"
+      >
+        <label
+          for="inventory-expiry-days"
+          style="
+            font-size: 13px;
+            color: var(--muted, #64748b);
+            white-space: nowrap;
+          "
+          >Warning Days:</label
+        >
+        <input
+          id="inventory-expiry-days"
+          type="number"
+          min="1"
+          step="1"
+          value="30"
+          data-inventory-expiry-days
+          style="width: 75px"
+        />
+      </div>
+    </div>
+  </div>
+
+  <article class="card">
+    <div class="card-header">
+      <h2>Per-Medicine Stock Summary</h2>
+      <span id="inventory-summary-count" class="status-pill">0 items</span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Medicine</th>
+            <th>Category</th>
+            <th class="numeric-cell">Current Stock</th>
+            <th class="numeric-cell">Min Stock</th>
+            <th>Nearest Expiry</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="inventory-summary-tbody">
+          <tr>
+            <td colspan="6" class="table-empty">Loading inventory summary…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination-bar" id="inventory-pagination" style="display: none">
+      <span id="inventory-pagination-summary">Showing 0 items</span>
+      <div class="pagination-actions">
+        <button class="button button-ghost" type="button" data-inventory-prev>
+          Previous
+        </button>
+        <button class="button button-ghost" type="button" data-inventory-next>
+          Next
+        </button>
+      </div>
+    </div>
+  </article>
+</section>

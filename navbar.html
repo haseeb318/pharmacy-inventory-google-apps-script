@@ -1,0 +1,47 @@
+<header class="topbar">
+  <div class="topbar-left">
+    <button
+      id="sidebar-toggle"
+      class="icon-button menu-toggle"
+      type="button"
+      aria-label="Toggle sidebar"
+    >
+      <span aria-hidden="true">&#9776;</span>
+    </button>
+    <div>
+      <h1 id="page-title">Dashboard</h1>
+      <p id="page-subtitle">Overview of inventory activity</p>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <div class="global-search">
+      <label class="sr-only" for="global-search-input"
+        >Search current page</label
+      >
+      <input
+        id="global-search-input"
+        type="search"
+        placeholder="Search current page"
+      />
+    </div>
+    <div class="user-chip" id="user-chip">
+      <span class="user-avatar" id="user-avatar-text" aria-hidden="true"
+        >U</span
+      >
+      <span class="user-meta">
+        <strong id="user-name">Loading...</strong>
+        <small id="user-role">Loading</small>
+      </span>
+      <button
+        id="logout-btn"
+        class="button button-ghost button-small"
+        type="button"
+        style="margin-left: 8px; font-size: 12px; padding: 4px 8px"
+        title="Sign out of system"
+      >
+        Logout
+      </button>
+    </div>
+  </div>
+</header>

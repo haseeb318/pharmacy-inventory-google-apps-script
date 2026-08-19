@@ -1,0 +1,300 @@
+<section
+  class="page-section"
+  data-page="settings"
+  data-title="Settings"
+  data-subtitle="Configure company profile, currency, tax, and system preferences"
+>
+  <!-- ── Top Action Bar ── -->
+  <div class="toolbar page-actions">
+    <div></div>
+    <div class="button-group">
+      <button
+        class="button button-ghost"
+        type="button"
+        id="settings-reset-btn"
+        data-action="settings-reset"
+      >
+        Reset to Defaults
+      </button>
+      <button
+        class="button button-primary"
+        type="button"
+        id="settings-save-btn"
+        data-action="settings-save"
+      >
+        Save Settings
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Status toast area inside page ── -->
+  <div id="settings-form-error" class="form-error" role="alert"></div>
+
+  <!-- ── Row 1: Company Profile  |  Branding & Logo ── -->
+  <div class="content-grid two-columns">
+    <!-- Company Profile -->
+    <article class="card">
+      <div class="card-header">
+        <h2>Company Profile</h2>
+        <span class="status-pill status-active">Profile</span>
+      </div>
+      <div class="form-grid">
+        <label for="settings-company-name">
+          Company Name <span class="required">*</span>
+          <input
+            id="settings-company-name"
+            name="companyName"
+            type="text"
+            placeholder="e.g. Al-Noor Traders"
+            autocomplete="organization"
+          />
+        </label>
+        <label for="settings-company-email">
+          Company Email
+          <input
+            id="settings-company-email"
+            name="companyEmail"
+            type="email"
+            placeholder="info@company.pk"
+            autocomplete="email"
+          />
+        </label>
+        <label for="settings-company-phone">
+          Phone Number
+          <input
+            id="settings-company-phone"
+            name="companyPhone"
+            type="tel"
+            placeholder="+92 300 0000000"
+            autocomplete="tel"
+          />
+        </label>
+        <label for="settings-company-address">
+          Address
+          <textarea
+            id="settings-company-address"
+            name="companyAddress"
+            rows="3"
+            placeholder="Street, City, Province, Pakistan"
+          ></textarea>
+        </label>
+      </div>
+    </article>
+
+    <!-- Branding & Logo -->
+    <article class="card">
+      <div class="card-header">
+        <h2>Branding &amp; Logo</h2>
+        <span class="status-pill status-active">Branding</span>
+      </div>
+      <div class="form-grid">
+        <label for="settings-logo-url">
+          Logo URL
+          <input
+            id="settings-logo-url"
+            name="logoUrl"
+            type="url"
+            placeholder="https://drive.google.com/..."
+          />
+        </label>
+        <div id="settings-logo-preview-wrap" class="logo-preview-wrap" hidden>
+          <p class="logo-preview-label">Logo Preview</p>
+          <img
+            id="settings-logo-preview"
+            class="logo-preview-img"
+            alt="Company logo preview"
+            src=""
+          />
+        </div>
+        <label for="settings-invoice-prefix">
+          Invoice Prefix <span class="required">*</span>
+          <input
+            id="settings-invoice-prefix"
+            name="invoicePrefix"
+            type="text"
+            placeholder="INV-"
+            maxlength="12"
+          />
+        </label>
+        <label for="settings-invoice-next-no">
+          Next Invoice Number
+          <input
+            id="settings-invoice-next-no"
+            name="invoiceNextNo"
+            type="number"
+            min="1"
+            step="1"
+            placeholder="1001"
+          />
+        </label>
+      </div>
+    </article>
+  </div>
+
+  <!-- ── Row 2: Currency & Tax  |  System Settings ── -->
+  <div class="content-grid two-columns" style="margin-top: 16px">
+    <!-- Currency & Tax -->
+    <article class="card">
+      <div class="card-header">
+        <h2>Currency &amp; Tax</h2>
+        <span class="status-pill status-active">Finance</span>
+      </div>
+      <div class="form-grid">
+        <label for="settings-currency">
+          Currency Code <span class="required">*</span>
+          <select id="settings-currency" name="currency">
+            <option value="PKR">PKR — Pakistani Rupee</option>
+            <option value="USD">USD — US Dollar</option>
+            <option value="EUR">EUR — Euro</option>
+            <option value="GBP">GBP — British Pound</option>
+            <option value="AED">AED — UAE Dirham</option>
+            <option value="SAR">SAR — Saudi Riyal</option>
+            <option value="INR">INR — Indian Rupee</option>
+            <option value="BDT">BDT — Bangladeshi Taka</option>
+          </select>
+        </label>
+        <label for="settings-currency-symbol">
+          Currency Symbol <span class="required">*</span>
+          <input
+            id="settings-currency-symbol"
+            name="currencySymbol"
+            type="text"
+            placeholder="₨"
+            maxlength="4"
+          />
+        </label>
+        <label for="settings-tax-label">
+          Tax Label
+          <input
+            id="settings-tax-label"
+            name="taxLabel"
+            type="text"
+            placeholder="GST"
+            maxlength="20"
+          />
+        </label>
+        <label for="settings-tax-rate">
+          Tax Rate (%)
+          <input
+            id="settings-tax-rate"
+            name="taxRate"
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            placeholder="17"
+          />
+        </label>
+        <!-- Live preview -->
+        <div class="settings-preview-box" id="settings-tax-preview">
+          <span class="settings-preview-label">Tax Preview</span>
+          <div class="settings-preview-row">
+            <span>Item Price</span>
+            <strong id="settings-preview-price">₨ 1,000.00</strong>
+          </div>
+          <div class="settings-preview-row">
+            <span id="settings-preview-tax-label">GST (17%)</span>
+            <strong id="settings-preview-tax-amount">₨ 170.00</strong>
+          </div>
+          <div class="settings-preview-row settings-preview-total">
+            <span>Total</span>
+            <strong id="settings-preview-total">₨ 1,170.00</strong>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <!-- System Settings -->
+    <article class="card">
+      <div class="card-header">
+        <h2>System Settings</h2>
+        <span class="status-pill status-active">System</span>
+      </div>
+      <div class="form-grid">
+        <label for="settings-timezone">
+          Timezone
+          <select id="settings-timezone" name="timezone">
+            <option value="Asia/Karachi">Asia/Karachi (PKT +05:00)</option>
+            <option value="UTC">UTC</option>
+            <option value="Asia/Dubai">Asia/Dubai (GST +04:00)</option>
+            <option value="Asia/Riyadh">Asia/Riyadh (AST +03:00)</option>
+            <option value="Asia/Kolkata">Asia/Kolkata (IST +05:30)</option>
+            <option value="Europe/London">Europe/London (GMT)</option>
+            <option value="America/New_York">America/New_York (EST)</option>
+          </select>
+        </label>
+        <label for="settings-date-format">
+          Date Format
+          <select id="settings-date-format" name="dateFormat">
+            <option value="dd/MM/yyyy">dd/MM/yyyy (31/12/2026)</option>
+            <option value="MM/dd/yyyy">MM/dd/yyyy (12/31/2026)</option>
+            <option value="yyyy-MM-dd">yyyy-MM-dd (2026-12-31)</option>
+          </select>
+        </label>
+
+        <!-- Toggle: Low Stock Alert -->
+        <div class="settings-toggle-row">
+          <div>
+            <div class="settings-toggle-label">Low Stock Alerts</div>
+            <div class="settings-toggle-hint">
+              Show warnings when stock falls below minimum
+            </div>
+          </div>
+          <label
+            class="toggle-switch"
+            for="settings-low-stock-alert"
+            aria-label="Low stock alerts"
+          >
+            <input
+              id="settings-low-stock-alert"
+              name="lowStockAlert"
+              type="checkbox"
+              role="switch"
+            />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <!-- Toggle: Dark Mode (future) -->
+        <div class="settings-toggle-row">
+          <div>
+            <div class="settings-toggle-label">Dark Mode</div>
+            <div class="settings-toggle-hint">
+              Dark interface theme (coming soon)
+            </div>
+          </div>
+          <label
+            class="toggle-switch"
+            for="settings-dark-mode"
+            aria-label="Dark mode"
+          >
+            <input
+              id="settings-dark-mode"
+              name="darkMode"
+              type="checkbox"
+              role="switch"
+              disabled
+            />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <label for="settings-language">
+          Language
+          <select id="settings-language" name="language">
+            <option value="en">English</option>
+            <option value="ur">اردو (Urdu)</option>
+          </select>
+        </label>
+
+        <!-- Settings info box -->
+        <div class="settings-info-box">
+          <span class="settings-info-icon" aria-hidden="true">ℹ</span>
+          Settings are stored securely in your Google Sheet's
+          <strong>Settings</strong> tab. Currency and tax changes apply to new
+          transactions only.
+        </div>
+      </div>
+    </article>
+  </div>
+</section>

@@ -1,0 +1,223 @@
+<section
+  class="page-section"
+  data-page="dashboard"
+  data-title="Dashboard"
+  data-subtitle="Overview of inventory activity"
+>
+  <!-- Top bar -->
+  <div class="page-actions">
+    <div class="dash-meta">
+      <span class="live-dot"></span>
+      <span class="page-meta" id="dashboard-updated-at">Loading&hellip;</span>
+    </div>
+    <button
+      class="button button-primary"
+      type="button"
+      data-action="refresh-page"
+    >
+      &#8635; Refresh
+    </button>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="dash-kpi-grid">
+    <article class="dash-kpi-card dash-kpi-blue">
+      <div class="dash-kpi-icon">&#128230;</div>
+      <div class="dash-kpi-body">
+        <span class="dash-kpi-label">Total Items</span>
+        <strong class="dash-kpi-value" data-kpi="totalItems">0</strong>
+        <small class="dash-kpi-sub">Tracked products</small>
+      </div>
+    </article>
+    <article class="dash-kpi-card dash-kpi-green">
+      <div class="dash-kpi-icon">&#8599;</div>
+      <div class="dash-kpi-body">
+        <span class="dash-kpi-label">Total Sales</span>
+        <strong class="dash-kpi-value" data-kpi="totalSales">0</strong>
+        <small class="dash-kpi-sub">All time revenue</small>
+      </div>
+    </article>
+    <article class="dash-kpi-card dash-kpi-amber">
+      <div class="dash-kpi-icon">&#8601;</div>
+      <div class="dash-kpi-body">
+        <span class="dash-kpi-label">Total Purchases</span>
+        <strong class="dash-kpi-value" data-kpi="totalPurchases">0</strong>
+        <small class="dash-kpi-sub">All time spending</small>
+      </div>
+    </article>
+    <article class="dash-kpi-card dash-kpi-red">
+      <div class="dash-kpi-icon">&#9888;</div>
+      <div class="dash-kpi-body">
+        <span class="dash-kpi-label">Low Stock</span>
+        <strong class="dash-kpi-value" data-kpi="lowStockItems">0</strong>
+        <small class="dash-kpi-sub">Needs restock</small>
+      </div>
+    </article>
+  </div>
+
+  <!-- Recent transactions row -->
+  <div class="dash-two-col">
+    <article class="card">
+      <div class="card-header">
+        <h2>Recent Sales</h2>
+        <button
+          class="button button-ghost"
+          type="button"
+          data-route-button="sales"
+        >
+          View all &rarr;
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Invoice</th>
+              <th>Customer</th>
+              <th>Date</th>
+              <th class="numeric-cell">Total</th>
+            </tr>
+          </thead>
+          <tbody id="dashboard-recent-sales">
+            <tr>
+              <td colspan="4" class="table-empty">No sales recorded yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="card-header">
+        <h2>Recent Purchases</h2>
+        <button
+          class="button button-ghost"
+          type="button"
+          data-route-button="purchases"
+        >
+          View all &rarr;
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Supplier</th>
+              <th>Date</th>
+              <th class="numeric-cell">Total</th>
+            </tr>
+          </thead>
+          <tbody id="dashboard-recent-purchases">
+            <tr>
+              <td colspan="4" class="table-empty">
+                No purchases recorded yet.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+  </div>
+
+  <!-- Low stock + Activity row -->
+  <div class="dash-two-col">
+    <article class="card">
+      <div class="card-header">
+        <h2>Low Stock Alerts</h2>
+        <button
+          class="button button-ghost"
+          type="button"
+          data-route-button="items"
+        >
+          View items &rarr;
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Category</th>
+              <th class="numeric-cell">Stock</th>
+              <th class="numeric-cell">Min</th>
+              <th class="numeric-cell">Short</th>
+            </tr>
+          </thead>
+          <tbody id="dashboard-low-stock">
+            <tr>
+              <td colspan="5" class="table-empty">No low-stock items found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="card-header">
+        <h2>Activity Snapshot</h2>
+        <span class="dash-live-badge"><span class="live-dot"></span> Live</span>
+      </div>
+      <div class="dash-chart">
+        <div class="dash-chart-row">
+          <span class="dash-chart-label">Sales</span>
+          <div class="dash-chart-track">
+            <div
+              class="dash-chart-bar dash-bar-sales"
+              id="dashboard-sales-bar"
+            ></div>
+          </div>
+          <strong class="dash-chart-count" id="dashboard-sales-count">0</strong>
+        </div>
+        <div class="dash-chart-row">
+          <span class="dash-chart-label">Purchases</span>
+          <div class="dash-chart-track">
+            <div
+              class="dash-chart-bar dash-bar-purchases"
+              id="dashboard-purchases-bar"
+            ></div>
+          </div>
+          <strong class="dash-chart-count" id="dashboard-purchases-count"
+            >0</strong
+          >
+        </div>
+        <div class="dash-chart-totals">
+          <div class="dash-chart-total-item">
+            <span>Sales Total</span>
+            <strong id="dashboard-chart-sales-total">-</strong>
+          </div>
+          <div class="dash-chart-total-item">
+            <span>Purchases Total</span>
+            <strong id="dashboard-chart-purchases-total">-</strong>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="dash-card dash-expiring">
+      <div class="dash-card-header">
+        <h2>Expiring Soon</h2>
+      </div>
+      <div class="table-wrap dash-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Item Name</th>
+              <th>Batch</th>
+              <th>Remaining</th>
+              <th>Expiry Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="dashboard-expiring-tbody">
+            <tr>
+              <td colspan="5" class="empty-state">
+                Loading expiring batches...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+  </div>
+</section>

@@ -1,0 +1,158 @@
+<section
+  class="page-section"
+  data-page="users"
+  data-title="Users"
+  data-subtitle="Manage system users and access"
+>
+  <div class="toolbar">
+    <div class="toolbar-search">
+      <label class="sr-only" for="users-search">Search users</label>
+      <input
+        id="users-search"
+        type="search"
+        placeholder="Search users"
+        data-users-search
+      />
+    </div>
+    <div class="toolbar-filters">
+      <label class="sr-only" for="users-role-filter">Filter by role</label>
+      <select id="users-role-filter" data-users-role-filter>
+        <option value="">All roles</option>
+      </select>
+      <label class="sr-only" for="users-status-filter">Filter by status</label>
+      <select id="users-status-filter" data-users-status-filter>
+        <option value="">All statuses</option>
+      </select>
+    </div>
+    <button
+      class="button button-primary"
+      type="button"
+      data-action="open-user-modal"
+    >
+      New User
+    </button>
+  </div>
+
+  <article class="card">
+    <div class="card-header">
+      <h2>Users</h2>
+      <span class="status-pill" id="users-count">0 users</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Updated</th>
+            <th class="actions-column">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="users-table-body">
+          <tr>
+            <td colspan="7" class="table-empty">No users found.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination-bar">
+      <span id="users-pagination-summary">Showing 0 users</span>
+      <div class="pagination-actions">
+        <button class="button button-ghost" type="button" data-users-prev>
+          Previous
+        </button>
+        <button class="button button-ghost" type="button" data-users-next>
+          Next
+        </button>
+      </div>
+    </div>
+  </article>
+
+  <div
+    id="user-modal"
+    class="modal-backdrop module-modal"
+    role="presentation"
+    aria-hidden="true"
+  >
+    <section
+      class="modal modal-wide"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="user-modal-title"
+    >
+      <form id="user-form">
+        <div class="modal-header">
+          <h2 id="user-modal-title">New User</h2>
+          <button
+            class="icon-button"
+            type="button"
+            data-user-modal-close
+            aria-label="Close user form"
+          >
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <input type="hidden" id="user-id" name="id" />
+        <div class="form-grid two-field-grid">
+          <label>
+            Name
+            <input
+              id="user-name-input"
+              name="name"
+              type="text"
+              autocomplete="name"
+              required
+              minlength="2"
+            />
+          </label>
+          <label>
+            Email
+            <input
+              id="user-email-input"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+            />
+          </label>
+          <label>
+            Role
+            <select id="user-role-input" name="role" required></select>
+          </label>
+          <label>
+            Status
+            <select id="user-status-input" name="status" required></select>
+          </label>
+          <label style="grid-column: span 2">
+            Password
+            <span
+              id="user-password-help"
+              style="font-weight: normal; color: #667085; font-size: 0.85em"
+              >(Minimum 6 characters)</span
+            >
+            <input
+              id="user-password-input"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+            />
+          </label>
+        </div>
+        <div class="form-error" id="user-form-error" role="alert"></div>
+        <div class="modal-actions">
+          <button
+            class="button button-ghost"
+            type="button"
+            data-user-modal-close
+          >
+            Cancel
+          </button>
+          <button class="button button-primary" type="submit">Save User</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</section>

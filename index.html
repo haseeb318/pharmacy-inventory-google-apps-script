@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <base target="_top" />
+    <meta charset="UTF-8" />
+    <title>Inventory Management System</title>
+    <?!= include('style'); ?>
+
+    <!-- Tom Select (searchable dropdown) -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css"
+    />
+
+    <style>
+      /* Ensure Tom Select dropdown shows above modal */
+      .ts-dropdown {
+        z-index: 9999;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="app-shell" data-sidebar-open="false">
+      <?!= include('sidebar'); ?>
+
+      <div class="app-main">
+        <?!= include('navbar'); ?>
+
+        <main class="content" id="page-root" tabindex="-1">
+          <?!= include('dashboard'); ?> <?!= include('users'); ?> <?!=
+          include('items'); ?> <?!= include('purchases'); ?> <?!=
+          include('sales'); ?> <?!= include('reports'); ?> <?!=
+          include('settings'); ?> <?!= include('inventory'); ?>
+        </main>
+      </div>
+    </div>
+
+    <!-- Dedicated Login & Sign Up View -->
+    <?!= include('login'); ?>
+
+    <div
+      id="loading-overlay"
+      class="loading-overlay"
+      aria-live="polite"
+      aria-hidden="true"
+    >
+      <div class="spinner" aria-label="Loading"></div>
+      <span>Loading</span>
+    </div>
+
+    <div
+      id="toast-region"
+      class="toast-region"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+
+    <div
+      id="confirm-dialog"
+      class="modal-backdrop"
+      role="presentation"
+      aria-hidden="true"
+    >
+      <section
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+      >
+        <div class="modal-header">
+          <h2 id="confirm-title">Confirm action</h2>
+          <button
+            class="icon-button"
+            type="button"
+            data-confirm-cancel
+            aria-label="Close dialog"
+          >
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <p id="confirm-message" class="modal-copy">
+          Are you sure you want to continue?
+        </p>
+        <div class="modal-actions">
+          <button class="button button-ghost" type="button" data-confirm-cancel>
+            Cancel
+          </button>
+          <button class="button button-danger" type="button" data-confirm-ok>
+            Confirm
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Tom Select JS (MUST load before script include) -->
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+
+    <?!= include('script'); ?>
+  </body>
+</html>
