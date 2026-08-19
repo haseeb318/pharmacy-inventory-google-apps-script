@@ -15,6 +15,8 @@ This application is designed as a lightweight, low-cost pharmacy inventory and s
 - Monitor low-stock items and stock alerts
 - Support item-wise inventory summaries and batch-level stock visibility
 
+![Inventory](screenshots/inventory.png)
+
 ### Purchase and Sales Tracking
 
 - Record supplier purchases and purchase batches
@@ -22,6 +24,8 @@ This application is designed as a lightweight, low-cost pharmacy inventory and s
 - Process sales transactions with customer information and payment details
 - Support multi-item sales and batch allocation logic
 - Maintain sales records with invoice references and item-level breakdowns
+
+![Purchases](screenshots/purchases.png)
 
 ### Expiry and Batch Tracking
 
@@ -36,6 +40,8 @@ This application is designed as a lightweight, low-cost pharmacy inventory and s
 - Monitor sales and purchase trends through dashboard summaries
 - Quickly identify inventory issues and expiring medicine stock
 
+![Dashboard](screenshots/dashboard.png)
+
 ### Reports and Analytics
 
 - Generate sales and purchase reports for selected date ranges
@@ -43,12 +49,16 @@ This application is designed as a lightweight, low-cost pharmacy inventory and s
 - Prepare export-ready report data in supported formats
 - Support operational reporting for pharmacy management teams
 
+![Reports](screenshots/reports.png)
+
 ### User and Access Management
 
 - Role-based access for administrators and staff
 - Login/logout session handling through Apps Script cache and properties
 - User management for active/inactive accounts
 - Settings configurability for application-level control
+
+![Users](screenshots/user.png)
 
 ### Google Sheets Integration
 
