@@ -23,19 +23,8 @@
         <option value="expiring">Expiring Soon</option>
       </select>
 
-      <div
-        class="field-inline"
-        style="display: flex; align-items: center; gap: 8px"
-      >
-        <label
-          for="inventory-expiry-days"
-          style="
-            font-size: 13px;
-            color: var(--muted, #64748b);
-            white-space: nowrap;
-          "
-          >Warning Days:</label
-        >
+      <div class="inventory-warning-control">
+        <label for="inventory-expiry-days">Warning Days:</label>
         <input
           id="inventory-expiry-days"
           type="number"
@@ -43,7 +32,6 @@
           step="1"
           value="30"
           data-inventory-expiry-days
-          style="width: 75px"
         />
       </div>
     </div>

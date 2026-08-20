@@ -182,6 +182,27 @@ function deletePurchase(id, token) {
       throw new Error("Purchase was not found.");
     }
 
+    // Guard: block deletion if any sale allocation references this batch
+    var allocations = getSheetRecords_("SalesAllocations", [
+      "ID",
+      "SaleID",
+      "ItemID",
+      "PurchaseID",
+      "BatchRowNumber",
+      "ConsumedQuantity",
+      "CreatedAt",
+      "UpdatedAt",
+    ]);
+    var hasAllocation = allocations.some(function (a) {
+      return normalizeText_(a.PurchaseID) === purchaseId;
+    });
+    if (hasAllocation) {
+      throw new Error(
+        "Cannot delete this purchase batch — it has been used in one or more sales. " +
+          "Delete the associated sales first.",
+      );
+    }
+
     // Delete batch record: inventory is derived from remainingQuantity.
     var sheet = getPurchasesSheet_();
     sheet.deleteRow(existing._rowNumber);
@@ -228,7 +249,13 @@ function getPurchasesSheet_() {
   return getOrCreateSheet_("Purchases", getPurchasesHeaders_());
 }
 
-function getPurchasesColumnIndexMap_(sheet, headers) {
+function getPurchasesColumnIndexMap_(sheet, headers, depth_) {
+  if ((depth_ || 0) > 1) {
+    throw new Error(
+      "Purchases sheet headers could not be repaired. Please run repairInventoryHeaders() manually.",
+    );
+  }
+
   var headerRow = sheet
     .getRange(1, 1, 1, Math.max(sheet.getLastColumn(), headers.length))
     .getValues()[0];
@@ -251,7 +278,7 @@ function getPurchasesColumnIndexMap_(sheet, headers) {
   if (missing.length) {
     // Attempt repair once, then rebuild the map.
     repairInventoryHeaders();
-    return getPurchasesColumnIndexMap_(sheet, headers);
+    return getPurchasesColumnIndexMap_(sheet, headers, (depth_ || 0) + 1);
   }
 
   return map;
@@ -459,8 +486,4 @@ function getPurchaseSuppliers_() {
   ]);
 }
 
-// Inventory is derived from Purchases.remainingQuantity - Sales deductions.
-// Keeping this function as a no-op for backward compatibility with old calls.
-function applyPurchaseStockDelta_(itemId, delta) {
-  return;
-}
+

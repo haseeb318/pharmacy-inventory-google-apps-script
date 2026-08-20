@@ -18,7 +18,9 @@
       <label class="sr-only" for="items-category-filter"
         >Filter by category</label
       >
-      <select id="items-category-filter" data-items-category-filter></select>
+      <select id="items-category-filter" data-items-category-filter>
+        <option value="">All Categories</option>
+      </select>
     </div>
     <button
       class="button button-primary"
@@ -50,7 +52,7 @@
 
         <tbody id="items-table-body">
           <tr>
-            <td colspan="10" class="table-empty">No inventory items found.</td>
+            <td colspan="7" class="table-empty">No inventory items found.</td>
           </tr>
         </tbody>
       </table>

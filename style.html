@@ -19,6 +19,7 @@
     --radius: 8px;
     --topbar-height: 76px;
     --sidebar-width: 264px;
+    --label: #344054;
   }
 
   body.dark-mode {
@@ -54,7 +55,8 @@
     min-height: 100%;
     background: var(--bg);
     color: var(--text);
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
     font-size: 14px;
   }
 
@@ -85,7 +87,7 @@
 
   th {
     background: var(--surface-muted);
-    color: #344054;
+    color: var(--label);
     font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
@@ -425,6 +427,41 @@
   .button {
     min-height: 38px;
     padding: 9px 14px;
+  }
+
+  .button-small {
+    min-height: 30px;
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .logout-button {
+    margin-left: 8px;
+  }
+
+  .inventory-warning-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .inventory-warning-control label {
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .inventory-warning-control input {
+    width: 75px;
+  }
+
+  .field-label-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--label);
+    letter-spacing: 0.02em;
+    display: block;
+    margin-bottom: 6px;
   }
 
   .button-primary {
@@ -819,29 +856,19 @@
     }
   }
 
-  /* Purchase modal form layout helpers */
-  #purchase-form {
-    padding: 0;
-  }
-
-  #purchase-form .field-group {
-    display: grid;
-    gap: 7px;
-  }
-
-  /* Two-column arrangement for a better fit on wide screens */
-  #purchase-form .field-group.field-full {
-    grid-column: 1 / -1;
-  }
-
-  /* Default: single column; upgrade to two columns for inputs that fit */
+  /* Purchase modal form layout */
   #purchase-form {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 14px;
     padding: 16px;
-    height: 80vh;
-    overflow: scroll;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  #purchase-form .field-group {
+    display: grid;
+    gap: 7px;
   }
 
   #purchase-form .field-full {
@@ -1120,6 +1147,11 @@
     cursor: not-allowed;
   }
 
+  .toggle-switch:has(input:disabled) {
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
   .settings-info-box {
     background: #eff6ff;
     border: 1px solid #bfdbfe;
@@ -1134,8 +1166,7 @@
     margin-right: 6px;
     font-size: 15px;
   }
-</style>
-<style>
+  /* ── Dashboard & Dedicated Login Styles ── */
   /* Dashboard KPI Cards */
   .dash-kpi-grid {
     display: grid;

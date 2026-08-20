@@ -13,7 +13,8 @@ function getItemsPageMeta(token) {
    PERFORMANCE: Lightweight items list for dropdowns (no stock calc)
    Returns only id + name for select/autocomplete components
    ================================================================ */
-function getItemsList() {
+function getItemsList(token) {
+  assertAuthenticatedRole_(token, ["Admin", "Staff"]);
   var items = getCachedRecords_("itemsList", "Items", getItemsHeaders_());
   var list = items.map(function (r) {
     return {
@@ -139,6 +140,17 @@ function deleteItem(id, token) {
 
     if (!existing) {
       throw new Error("Item was not found.");
+    }
+
+    var purchases = getPurchaseRecords_();
+    var hasPurchases = purchases.some(function (p) {
+      return normalizeText_(p.itemId) === itemId;
+    });
+    if (hasPurchases) {
+      throw new Error(
+        "Cannot delete this item — it has purchase records. " +
+          "Delete all associated purchases first.",
+      );
     }
 
     sheet.deleteRow(existing._rowNumber);

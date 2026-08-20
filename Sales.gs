@@ -1,4 +1,5 @@
-function getSalesPageMeta() {
+function getSalesPageMeta(token) {
+  assertAuthenticatedRole_(token, ["Admin", "Staff"]);
   return successResponse_({
     sheetName: "Sales",
     module: "Sales",
@@ -11,21 +12,9 @@ function getSalesPageMeta() {
 /* ================================================================
    PERFORMANCE: Lightweight customers list for dropdowns
    ================================================================ */
-function getCustomersList() {
-  var sales = getSalesRecords_();
-  var customers = [];
-  for (var i = 0; i < sales.length; i++) {
-    var c = normalizeText_(sales[i].customerName);
-    if (c && customers.indexOf(c) === -1) {
-      customers.push(c);
-    }
-  }
-  customers = customers.concat([
-    "Walk-in Customer",
-    "Retail Customer",
-    "Wholesale Customer",
-  ]);
-  return successResponse_({ customers: customers });
+function getCustomersList(token) {
+  assertAuthenticatedRole_(token, ["Admin", "Staff"]);
+  return successResponse_({ customers: getSalesCustomers_() });
 }
 
 function buildItemSellingPriceMap_() {
@@ -815,8 +804,10 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell) {
     var consumed = Math.min(available, qty);
     if (consumed <= 0) continue;
 
-    // update Purchases remainingQuantity column (column 13 in Purchases sheet)
-    var remainingCol = 13;
+    // update Purchases remainingQuantity column dynamically
+    var purchaseHeaders = getPurchasesHeaders_();
+    var colMap = getPurchasesColumnIndexMap_(purchaseSheet, purchaseHeaders);
+    var remainingCol = colMap["RemainingQuantity"] || 13;
     purchaseSheet
       .getRange(batch._rowNumber, remainingCol, 1, 1)
       .setValue(available - consumed);
@@ -884,10 +875,13 @@ function restoreSaleAllocations_(saleId) {
 
   var purchaseSheet = getPurchasesSheet_();
 
+  var purchaseHeaders = getPurchasesHeaders_();
+  var colMap = getPurchasesColumnIndexMap_(purchaseSheet, purchaseHeaders);
+  var remainingCol = colMap["RemainingQuantity"] || 13;
+
   // restore each consumed batch
   allocations.forEach(function (a) {
     var batchRow = a.batchRowNumber;
-    var remainingCol = 13;
     var currentRemaining = toNumber_(
       purchaseSheet.getRange(batchRow, remainingCol, 1, 1).getValue(),
     );

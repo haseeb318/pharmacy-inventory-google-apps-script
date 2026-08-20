@@ -147,14 +147,15 @@
         </div>
 
         <div class="field-group">
-          <label for="purchase-total-cost-input">Total Cost</label>
+          <label for="purchase-total-cost-input">Total Cost (Auto-calculated)</label>
           <input
             id="purchase-total-cost-input"
             name="totalCost"
             type="number"
             min="0"
             step="0.01"
-            required
+            readonly
+            class="input-readonly"
           />
         </div>
 

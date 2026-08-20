@@ -66,10 +66,10 @@ function migrateCreateInitialBatches() {
         toNumber_(item.sellingPrice), // SellingPrice
         toNumber_(totalCost), // TotalCost
         "Initial Stock", // Supplier
-        formatDate_(today), // PurchaseDate
+        formatSheetDate_(today), // PurchaseDate
         "Initial batch created by migration.", // Notes
         initialBatchNumber, // BatchNumber
-        formatDate_(expiry), // ExpiryDate
+        formatSheetDate_(expiry), // ExpiryDate
         toNumber_(currentStock), // RemainingQuantity
         Session.getEffectiveUser().getEmail() || "System", // CreatedBy
         formatDateTime_(today), // CreatedAt

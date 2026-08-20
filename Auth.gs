@@ -202,6 +202,26 @@ function changePassword(token, currentPassword, newPassword) {
     var newHash = hashPassword_(newSalt, newNorm);
     setUserPassword_(found.id, newSalt, newHash);
 
+    // Invalidate ALL existing session tokens for this user
+    var props = PropertiesService.getScriptProperties().getProperties();
+    var keysToDelete = [];
+    Object.keys(props).forEach(function (key) {
+      if (key.indexOf(AUTH_CACHE_PREFIX_) === 0) {
+        try {
+          var data = JSON.parse(props[key]);
+          if (data && data.userId === found.id) {
+            keysToDelete.push(key);
+            CacheService.getScriptCache().remove(key);
+          }
+        } catch (e) {}
+      }
+    });
+    if (keysToDelete.length) {
+      keysToDelete.forEach(function (k) {
+        PropertiesService.getScriptProperties().deleteProperty(k);
+      });
+    }
+
     return successResponse_(null, "Password changed successfully.");
   } catch (e) {
     return errorResponse_(e.message || "Failed to change password.");
