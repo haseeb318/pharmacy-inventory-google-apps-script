@@ -308,6 +308,32 @@ function formatSheetDate_(value) {
   return s;
 }
 
+function formatDisplayDate_(value) {
+  if (!value || value === "-" || value === "Not updated" || value === "No date") {
+    return "-";
+  }
+  var d;
+  if (value instanceof Date) {
+    d = value;
+  } else {
+    var s = String(value).trim();
+    if (!s) return "-";
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      var parts = s.substring(0, 10).split("-");
+      d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    } else {
+      var parsed = new Date(s);
+      if (!isNaN(parsed.getTime())) {
+        d = parsed;
+      }
+    }
+  }
+  if (!d || isNaN(d.getTime())) {
+    return String(value);
+  }
+  return Utilities.formatDate(d, APP_CONFIG.timezone || "Asia/Karachi", "MMM dd, yyyy");
+}
+
 function formatCurrency_(value) {
   return (
     "\u20A8 " +

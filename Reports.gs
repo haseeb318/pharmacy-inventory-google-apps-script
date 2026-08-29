@@ -154,7 +154,7 @@ function buildSalesReportPayload_(items, filters, generatedAt) {
           saleItem.quantity,
           formatCurrency_(saleItem.unitPrice),
           formatCurrency_(saleItem.totalPrice),
-          sale.saleDate || "-",
+          formatDisplayDate_(sale.saleDate),
         ],
         export: [
           sale.invoiceNumber || "-",
@@ -163,7 +163,7 @@ function buildSalesReportPayload_(items, filters, generatedAt) {
           saleItem.quantity,
           toNumber_(saleItem.unitPrice),
           toNumber_(saleItem.totalPrice),
-          sale.saleDate || "-",
+          formatDisplayDate_(sale.saleDate),
         ],
       });
     });
@@ -231,7 +231,7 @@ function buildPurchaseReportPayload_(items, filters, generatedAt) {
         purchase.quantity,
         formatCurrency_(purchase.unitPrice),
         formatCurrency_(purchase.totalCost),
-        purchase.purchaseDate || "-",
+        formatDisplayDate_(purchase.purchaseDate),
       ],
       export: [
         purchase.id,
@@ -240,7 +240,7 @@ function buildPurchaseReportPayload_(items, filters, generatedAt) {
         purchase.quantity,
         toNumber_(purchase.unitPrice),
         toNumber_(purchase.totalCost),
-        purchase.purchaseDate || "-",
+        formatDisplayDate_(purchase.purchaseDate),
       ],
     };
   });
@@ -515,14 +515,14 @@ function buildReportFilterSummary_(filters) {
   }
 
   if (fromDate && toDate) {
-    return "Date range: " + fromDate + " to " + toDate;
+    return "Date range: " + formatDisplayDate_(fromDate) + " to " + formatDisplayDate_(toDate);
   }
 
   if (fromDate) {
-    return "Date from: " + fromDate;
+    return "Date from: " + formatDisplayDate_(fromDate);
   }
 
-  return "Date to: " + toDate;
+  return "Date to: " + formatDisplayDate_(toDate);
 }
 
 // sumInventoryValue_ removed

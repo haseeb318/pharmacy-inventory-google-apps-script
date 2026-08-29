@@ -91,6 +91,7 @@ function createPurchase(payload, token) {
     invalidateStockMapCache_();
     invalidatePurchaseLookupMapCache_();
     invalidateItemLookupMapCache_();
+    invalidatePurchasesByItemMapCache_();
 
     return successResponse_(buildPurchasesPayload_());
   } catch (error) {
@@ -160,6 +161,7 @@ function updatePurchase(id, payload, token) {
     invalidateStockMapCache_();
     invalidatePurchaseLookupMapCache_();
     invalidateItemLookupMapCache_();
+    invalidatePurchasesByItemMapCache_();
 
     return successResponse_(buildPurchasesPayload_());
   } catch (error) {
@@ -212,6 +214,7 @@ function deletePurchase(id, token) {
     invalidateStockMapCache_();
     invalidatePurchaseLookupMapCache_();
     invalidateItemLookupMapCache_();
+    invalidatePurchasesByItemMapCache_();
 
     return successResponse_(buildPurchasesPayload_());
   } catch (error) {
@@ -342,6 +345,37 @@ function buildPurchaseLookupMap_() {
 
 function invalidatePurchaseLookupMapCache_() {
   purchaseLookupMapCache_ = null;
+}
+
+/* ================================================================
+    PERFORMANCE: Pre-grouped purchases by itemId
+    Builds a hash map of itemId -> [purchase records] in ONE pass
+    instead of N filter scans (N = number of unique items in a sale).
+    ================================================================ */
+var purchasesByItemMapCache_ = null;
+
+function buildPurchasesByItemMap_() {
+  if (purchasesByItemMapCache_ !== null) {
+    return purchasesByItemMapCache_;
+  }
+
+  var purchases = getPurchaseRecords_();
+  var map = {};
+
+  for (var i = 0; i < purchases.length; i++) {
+    var id = normalizeText_(purchases[i].itemId);
+    if (!map[id]) {
+      map[id] = [];
+    }
+    map[id].push(purchases[i]);
+  }
+
+  purchasesByItemMapCache_ = map;
+  return map;
+}
+
+function invalidatePurchasesByItemMapCache_() {
+  purchasesByItemMapCache_ = null;
 }
 
 function getPurchaseRecords_() {

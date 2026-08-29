@@ -24,7 +24,8 @@ function getSalesAllocationsSheet_() {
 }
 
 function getSalesAllocationsRecords_() {
-  return getSheetRecords_(
+  return getCachedRecords_(
+    "allocationRecords",
     "SalesAllocations",
     getSalesAllocationsHeaders_(),
   ).map(function (r) {
@@ -43,12 +44,35 @@ function getSalesAllocationsRecords_() {
 }
 
 function deleteAllocationsBySaleId_(saleId) {
+  var normalizedSaleId = normalizeText_(saleId);
   var sheet = getSalesAllocationsSheet_();
-  var allocations = getSalesAllocationsRecords_();
+  var headers = getSalesAllocationsHeaders_();
 
-  for (var i = allocations.length - 1; i >= 0; i -= 1) {
-    if (allocations[i].saleId === saleId) {
-      sheet.deleteRow(allocations[i]._rowNumber);
+  // Find SaleID column index
+  var saleIdColIndex = -1;
+  for (var h = 0; h < headers.length; h++) {
+    if (headers[h] === "SaleID") {
+      saleIdColIndex = h;
+      break;
     }
   }
+  if (saleIdColIndex === -1) return;
+
+  var dataRange = sheet.getDataRange();
+  var allRows = dataRange.getValues();
+
+  if (allRows.length < 2) return;
+
+  // PERFORMANCE: Read-filter-rewrite instead of N individual deleteRow calls
+  var keepRows = [allRows[0]];
+  for (var i = 1; i < allRows.length; i++) {
+    if (normalizeText_(allRows[i][saleIdColIndex]) !== normalizedSaleId) {
+      keepRows.push(allRows[i]);
+    }
+  }
+
+  if (keepRows.length === allRows.length) return;
+
+  dataRange.clearContent();
+  sheet.getRange(1, 1, keepRows.length, keepRows[0].length).setValues(keepRows);
 }

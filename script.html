@@ -1876,7 +1876,7 @@
                       4,
                       "$20.00",
                       "$80.00",
-                      filters.dateFrom || "2026-07-01",
+                      formatDate(filters.dateFrom || "2026-07-01"),
                     ],
                   ]
                 : isLowStock
@@ -1889,7 +1889,7 @@
                         "Sample Customer",
                         2,
                         "$70.00",
-                        filters.dateFrom || "2026-07-02",
+                        formatDate(filters.dateFrom || "2026-07-02"),
                       ],
                     ],
             totalRecords: 1,
@@ -3694,7 +3694,7 @@
           : [payload, state.sessionToken]),
       )
         .then((response) => {
-          applySalesData(response.data);
+          applySaleDelta(response.data);
           closeSaleModal();
           toast(saleId ? "Sale updated." : "Sale created.", "success");
         })
@@ -3705,6 +3705,51 @@
           );
         })
         .finally(() => showLoading(false));
+    }
+
+    function applySaleDelta(deltaData) {
+      if (!deltaData || deltaData.action === "create" && deltaData.sale) {
+        // Add new sale to records (already sorted by frontend in loadSales)
+        const newSale = deltaData.sale;
+        if (newSale.id) {
+          state.sales.records.unshift(newSale);
+          state.sales.loaded = true;
+          renderSales();
+        }
+      } else if (deltaData.action === "update" && deltaData.sale) {
+        // Update existing sale in place
+        const updatedSale = deltaData.sale;
+        const idx = state.sales.records.findIndex(
+          (s) => s.id === updatedSale.id,
+        );
+        if (idx >= 0) {
+          state.sales.records[idx] = updatedSale;
+          // Re-sort by date (newest first)
+          state.sales.records.sort((a, b) => {
+            const da = a.saleDate ? new Date(a.saleDate).getTime() : 0;
+            const db = b.saleDate ? new Date(b.saleDate).getTime() : 0;
+            if (db !== da) return db - da;
+            return String(b.id || "").localeCompare(String(a.id || ""));
+          });
+          state.sales.loaded = true;
+          renderSales();
+        }
+      } else if (deltaData.action === "delete" && deltaData.saleId) {
+        // Remove sale from records
+        const saleId = deltaData.saleId;
+        const idx = state.sales.records.findIndex((s) => s.id === saleId);
+        if (idx >= 0) {
+          state.sales.records.splice(idx, 1);
+          state.sales.loaded = true;
+          renderSales();
+        }
+      }
+
+      // Invalidate dependent pages so they fetch fresh data on next navigation
+      state.items.loaded = false;
+      state.dashboardLoaded = false;
+      state.reports.loaded = false;
+      state.inventory.loaded = false;
     }
 
     function validateSaleForm(payload) {
@@ -3792,7 +3837,7 @@
         showLoading(true);
         serverCall("deleteSale", saleId, state.sessionToken)
           .then((response) => {
-            applySalesData(response.data);
+            applySaleDelta(response.data);
             toast("Sale deleted.", "success");
           })
           .catch((error) => {

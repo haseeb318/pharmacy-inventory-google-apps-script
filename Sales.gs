@@ -72,7 +72,9 @@ function createSale(payload, token) {
 
   try {
     assertAuthenticatedRole_(token, ["Admin", "Staff"]);
-    var sale = validateSalePayload_(payload, "");
+    // PERFORMANCE: Single group-by pass over purchases to avoid per-item full table scans
+    var purchasesByItem = buildPurchasesByItemMap_();
+    var sale = validateSalePayload_(payload, "", purchasesByItem);
     var saleSheet = getSalesSheet_();
     var itemsSheet = getSaleItemsSheet_();
     var now = formatDateTime_(new Date());
@@ -108,6 +110,7 @@ function createSale(payload, token) {
     for (var j = 0; j < items.length; j++) {
       var item = items[j];
       var saleItemId = createSaleItemId_();
+      var normalizedItemId = normalizeText_(item.itemId);
 
       itemsSheet.appendRow([
         saleItemId,
@@ -120,8 +123,13 @@ function createSale(payload, token) {
         now,
       ]);
 
-      // Allocate FIFO batches for this item
-      allocateSaleBatches_(saleId, item.itemId, toNumber_(item.quantity));
+      // Allocate FIFO batches using pre-grouped purchases
+      allocateSaleBatches_(
+        saleId,
+        item.itemId,
+        toNumber_(item.quantity),
+        purchasesByItem[normalizedItemId] || [],
+      );
     }
 
     // PERFORMANCE: Invalidate caches after mutation
@@ -130,8 +138,35 @@ function createSale(payload, token) {
     invalidateSaleLookupMapCache_();
     invalidateItemLookupMapCache_();
     invalidatePurchaseLookupMapCache_();
+    invalidatePurchasesByItemMapCache_();
 
-    return successResponse_(buildSalesPayload_());
+    // PERFORMANCE: Return minimal delta instead of full page payload
+    return successResponse_({
+      action: "create",
+      sale: {
+        id: saleId,
+        invoiceNumber: invoiceNumber,
+        customerName: sale.customerName,
+        customerPhone: sale.customerPhone,
+        saleDate: sale.saleDate,
+        paymentMethod: sale.paymentMethod,
+        status: sale.status,
+        notes: sale.notes,
+        totalAmount: toNumber_(totalAmount),
+        itemCount: items.length,
+        items: items.map(function (it) {
+          return {
+            itemId: it.itemId,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            totalPrice: it.totalPrice,
+          };
+        }),
+        createdBy: sale.createdBy,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
   } catch (error) {
     return errorResponse_(error.message);
   } finally {
@@ -151,7 +186,9 @@ function updateSale(id, payload, token) {
     assertAuthenticatedRole_(token, ["Admin", "Staff"]);
     var saleId = normalizeText_(id);
     var existing = findSaleById_(saleId);
-    var sale = validateSalePayload_(payload, saleId);
+    // PERFORMANCE: Single group-by pass over purchases
+    var purchasesByItem = buildPurchasesByItemMap_();
+    var sale = validateSalePayload_(payload, saleId, purchasesByItem);
     var now = formatDateTime_(new Date());
 
     if (!existing) {
@@ -163,6 +200,10 @@ function updateSale(id, payload, token) {
 
     // Delete old sale items
     deleteSaleItemsBySaleId_(saleId);
+
+    // PERFORMANCE: Rebuild purchasesByItem map with FRESH data after allocation restore
+    // (restoreSaleAllocations_ modified purchase remaining quantities)
+    purchasesByItem = buildPurchasesByItemMap_();
 
     // Update sale header
     var totalAmount = 0;
@@ -202,6 +243,7 @@ function updateSale(id, payload, token) {
     for (var j = 0; j < items.length; j++) {
       var item = items[j];
       var saleItemId = createSaleItemId_();
+      var normalizedItemId = normalizeText_(item.itemId);
 
       itemsSheet.appendRow([
         saleItemId,
@@ -214,7 +256,13 @@ function updateSale(id, payload, token) {
         now,
       ]);
 
-      allocateSaleBatches_(saleId, item.itemId, toNumber_(item.quantity));
+      // Allocate FIFO batches using pre-grouped purchases
+      allocateSaleBatches_(
+        saleId,
+        item.itemId,
+        toNumber_(item.quantity),
+        purchasesByItem[normalizedItemId] || [],
+      );
     }
 
     // PERFORMANCE: Invalidate caches after mutation
@@ -223,8 +271,35 @@ function updateSale(id, payload, token) {
     invalidateSaleLookupMapCache_();
     invalidateItemLookupMapCache_();
     invalidatePurchaseLookupMapCache_();
+    invalidatePurchasesByItemMapCache_();
 
-    return successResponse_(buildSalesPayload_());
+    // PERFORMANCE: Return minimal delta instead of full page payload
+    return successResponse_({
+      action: "update",
+      sale: {
+        id: saleId,
+        invoiceNumber: sale.invoiceNumber,
+        customerName: sale.customerName,
+        customerPhone: sale.customerPhone,
+        saleDate: sale.saleDate,
+        paymentMethod: sale.paymentMethod,
+        status: sale.status,
+        notes: sale.notes,
+        totalAmount: toNumber_(totalAmount),
+        itemCount: items.length,
+        items: items.map(function (it) {
+          return {
+            itemId: it.itemId,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            totalPrice: it.totalPrice,
+          };
+        }),
+        createdBy: existing.createdBy || sale.createdBy,
+        createdAt: existing.createdAt || now,
+        updatedAt: now,
+      },
+    });
   } catch (error) {
     return errorResponse_(error.message);
   } finally {
@@ -264,8 +339,13 @@ function deleteSale(id, token) {
     invalidateSaleLookupMapCache_();
     invalidateItemLookupMapCache_();
     invalidatePurchaseLookupMapCache_();
+    invalidatePurchasesByItemMapCache_();
 
-    return successResponse_(buildSalesPayload_());
+    // PERFORMANCE: Return minimal delta instead of full page payload
+    return successResponse_({
+      action: "delete",
+      saleId: saleId,
+    });
   } catch (error) {
     return errorResponse_(error.message);
   } finally {
@@ -295,7 +375,11 @@ function getSaleItemsSheet_() {
 }
 
 function getSaleItemsRecords_(saleId) {
-  var allItems = getSheetRecords_("Sale_Items", getSaleItemsHeaders_());
+  var allItems = getCachedRecords_(
+    "saleItemsRecords",
+    "Sale_Items",
+    getSaleItemsHeaders_(),
+  );
 
   // Always map raw records to normalized objects with lowercase property names
   var mappedItems = allItems.map(function (r) {
@@ -322,18 +406,37 @@ function getSaleItemsRecords_(saleId) {
 
 function deleteSaleItemsBySaleId_(saleId) {
   var normalizedSaleId = normalizeText_(saleId);
-  var allItems = getSheetRecords_("Sale_Items", getSaleItemsHeaders_());
-  var itemsToDelete = allItems.filter(function (r) {
-    return normalizeText_(r.SaleID) === normalizedSaleId;
-  });
-
-  if (!itemsToDelete.length) return;
-
   var sheet = getSaleItemsSheet_();
-  // Delete in reverse order to preserve row numbers
-  for (var i = itemsToDelete.length - 1; i >= 0; i--) {
-    sheet.deleteRow(itemsToDelete[i]._rowNumber);
+  var headers = getSaleItemsHeaders_();
+
+  // Find SaleID column index from headers array
+  var saleIdColIndex = -1;
+  for (var h = 0; h < headers.length; h++) {
+    if (headers[h] === "SaleID") {
+      saleIdColIndex = h;
+      break;
+    }
   }
+  if (saleIdColIndex === -1) return;
+
+  var dataRange = sheet.getDataRange();
+  var allRows = dataRange.getValues();
+
+  if (allRows.length < 2) return; // only header row
+
+  // PERFORMANCE: Read-filter-rewrite instead of N individual deleteRow calls
+  var keepRows = [allRows[0]]; // always keep header
+  for (var i = 1; i < allRows.length; i++) {
+    if (normalizeText_(allRows[i][saleIdColIndex]) !== normalizedSaleId) {
+      keepRows.push(allRows[i]);
+    }
+  }
+
+  if (keepRows.length === allRows.length) return; // nothing to delete
+
+  // Single batch: clear all content, then write filtered rows
+  dataRange.clearContent();
+  sheet.getRange(1, 1, keepRows.length, keepRows[0].length).setValues(keepRows);
 }
 
 function createSaleItemId_() {
@@ -464,7 +567,7 @@ function createSaleId_() {
    Validation
    ================================================================ */
 
-function validateSalePayload_(payload, existingId) {
+function validateSalePayload_(payload, existingId, purchasesByItem) {
   var data = payload || {};
   var items = data.items || [];
 
@@ -562,12 +665,21 @@ function validateSalePayload_(payload, existingId) {
       var netRequired = requiredQty - existingQty;
       if (netRequired <= 0) continue;
 
-      var purchases = getPurchaseRecords_().filter(function (p) {
-        return (
-          normalizeText_(p.itemId) === itemKey &&
-          toNumber_(p.remainingQuantity) > 0
-        );
-      });
+      // PERFORMANCE: Use pre-grouped purchases map to avoid per-item full table scan
+      var purchases;
+      if (purchasesByItem) {
+        var itemBatches = purchasesByItem[itemKey] || [];
+        purchases = itemBatches.filter(function (p) {
+          return toNumber_(p.remainingQuantity) > 0;
+        });
+      } else {
+        purchases = getPurchaseRecords_().filter(function (p) {
+          return (
+            normalizeText_(p.itemId) === itemKey &&
+            toNumber_(p.remainingQuantity) > 0
+          );
+        });
+      }
 
       var availableStock = purchases.reduce(function (t, p) {
         return t + toNumber_(p.remainingQuantity);
@@ -592,11 +704,14 @@ function validateSalePayload_(payload, existingId) {
 
 function getSalesCustomers_() {
   var sales = getSalesRecords_();
+  var seen = {};
   var customers = [];
 
   sales.forEach(function (sale) {
-    if (sale.customerName && customers.indexOf(sale.customerName) === -1) {
-      customers.push(sale.customerName);
+    var name = sale.customerName;
+    if (name && !seen[name]) {
+      seen[name] = true;
+      customers.push(name);
     }
   });
 
@@ -768,19 +883,32 @@ function getSalesAllocationsSheet_() {
   ]);
 }
 
-function allocateSaleBatches_(saleId, itemId, quantityToSell) {
+function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
   var qty = toNumber_(quantityToSell);
   if (qty <= 0) return [];
 
   var todayStr = formatSheetDate_(new Date());
-  var purchases = getPurchaseRecords_().filter(function (p) {
-    var isExpired = p.expiryDate && p.expiryDate < todayStr;
-    return (
-      normalizeText_(p.itemId) === normalizeText_(itemId) &&
-      toNumber_(p.remainingQuantity) > 0 &&
-      !isExpired
-    );
-  });
+
+  var purchases;
+  if (itemPurchases) {
+    // Pre-grouped purchases passed in — avoid full table scan
+    purchases = itemPurchases.filter(function (p) {
+      var isExpired = p.expiryDate && p.expiryDate < todayStr;
+      return (
+        toNumber_(p.remainingQuantity) > 0 && !isExpired
+      );
+    });
+  } else {
+    // Fallback: full scan (kept for backward compatibility)
+    purchases = getPurchaseRecords_().filter(function (p) {
+      var isExpired = p.expiryDate && p.expiryDate < todayStr;
+      return (
+        normalizeText_(p.itemId) === normalizeText_(itemId) &&
+        toNumber_(p.remainingQuantity) > 0 &&
+        !isExpired
+      );
+    });
+  }
 
   purchases.sort(function (a, b) {
     var dateA = new Date(a.expiryDate || "9999-12-31").getTime();
@@ -792,7 +920,14 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell) {
   var allocSheet = getSalesAllocationsSheet_();
   var now = formatDateTime_(new Date());
 
+  // PERFORMANCE: Hoist column index map OUTSIDE the loop — compute once
+  var purchaseHeaders = getPurchasesHeaders_();
+  var colMap = getPurchasesColumnIndexMap_(purchaseSheet, purchaseHeaders);
+  var remainingCol = colMap["RemainingQuantity"] || 14;
+
   var allocations = [];
+  // PERFORMANCE: Batch remaining-quantity updates instead of per-batch setValue calls
+  var remainingUpdates = [];
 
   for (var i = 0; i < purchases.length; i++) {
     if (qty <= 0) break;
@@ -804,13 +939,11 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell) {
     var consumed = Math.min(available, qty);
     if (consumed <= 0) continue;
 
-    // update Purchases remainingQuantity column dynamically
-    var purchaseHeaders = getPurchasesHeaders_();
-    var colMap = getPurchasesColumnIndexMap_(purchaseSheet, purchaseHeaders);
-    var remainingCol = colMap["RemainingQuantity"] || 13;
-    purchaseSheet
-      .getRange(batch._rowNumber, remainingCol, 1, 1)
-      .setValue(available - consumed);
+    // Collect update for batch write at end of loop
+    remainingUpdates.push({
+      rowNumber: batch._rowNumber,
+      newValue: available - consumed,
+    });
 
     // record allocation
     var allocId = "ALC-" + Utilities.getUuid().split("-")[0].toUpperCase();
@@ -837,6 +970,23 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell) {
     qty -= consumed;
   }
 
+  // PERFORMANCE: Batch-write all remaining quantity updates in a single call
+  if (remainingUpdates.length === 1) {
+    purchaseSheet
+      .getRange(remainingUpdates[0].rowNumber, remainingCol, 1, 1)
+      .setValue(remainingUpdates[0].newValue);
+  } else if (remainingUpdates.length > 1) {
+    var rows = remainingUpdates.map(function (u) {
+      return u.rowNumber;
+    });
+    var values = remainingUpdates.map(function (u) {
+      return [u.newValue];
+    });
+    purchaseSheet
+      .getRange(rows[0], remainingCol, rows.length, 1)
+      .setValues(values);
+  }
+
   if (qty > 0) {
     throw new Error("Insufficient stock for this sale.");
   }
@@ -845,56 +995,81 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell) {
 }
 
 function restoreSaleAllocations_(saleId) {
-  var allocHeaders = [
-    "ID",
-    "SaleID",
-    "ItemID",
-    "PurchaseID",
-    "BatchRowNumber",
-    "ConsumedQuantity",
-    "CreatedAt",
-    "UpdatedAt",
-  ];
-  var allocs = getSheetRecords_("SalesAllocations", allocHeaders).map(
-    function (r) {
-      return {
-        saleId: normalizeText_(r.SaleID),
-        purchaseId: normalizeText_(r.PurchaseID),
-        batchRowNumber: toNumber_(r.BatchRowNumber),
-        consumedQuantity: toNumber_(r.ConsumedQuantity),
-        _rowNumber: r._rowNumber,
-      };
-    },
-  );
+  var normalizedSaleId = normalizeText_(saleId);
 
+  // Use cached allocation records (getSalesAllocationsRecords_ uses CacheService)
+  var allocs = getSalesAllocationsRecords_();
   var allocations = allocs.filter(function (a) {
-    return a.saleId === normalizeText_(saleId);
+    return a.saleId === normalizedSaleId;
   });
 
   if (!allocations.length) return;
 
   var purchaseSheet = getPurchasesSheet_();
-
   var purchaseHeaders = getPurchasesHeaders_();
   var colMap = getPurchasesColumnIndexMap_(purchaseSheet, purchaseHeaders);
-  var remainingCol = colMap["RemainingQuantity"] || 13;
+  var remainingCol = colMap["RemainingQuantity"] || 14;
 
-  // restore each consumed batch
+  // PERFORMANCE: Batch-read all affected remaining-quantity cells in ONE call
+  var batchRows = allocations.map(function (a) {
+    return a.batchRowNumber;
+  });
+  var minRow = Math.min.apply(null, batchRows);
+  var maxRow = Math.max.apply(null, batchRows);
+  var numRows = maxRow - minRow + 1;
+
+  var range = purchaseSheet.getRange(minRow, remainingCol, numRows, 1);
+  var values = range.getValues();
+
+  // Build row-number to array-offset lookup for O(1) access
+  var rowToAllocIndex = {};
+  for (var i = 0; i < batchRows.length; i++) {
+    rowToAllocIndex[batchRows[i]] = i;
+  }
+
+  // Compute restored quantities in memory
+  for (var r = 0; r < numRows; r++) {
+    var actualRow = minRow + r;
+    var allocIdx = rowToAllocIndex[actualRow];
+    if (allocIdx !== undefined) {
+      values[r][0] =
+        toNumber_(values[r][0]) +
+        toNumber_(allocations[allocIdx].consumedQuantity);
+    }
+  }
+
+  // PERFORMANCE: Batch-write all restored quantities in a single call
+  range.setValues(values);
+
+  // PERFORMANCE: Batch-delete allocation rows using read-filter-rewrite
+  var allocSheet = getSalesAllocationsSheet_();
+  var allocDataRange = allocSheet.getDataRange();
+  var allRows = allocDataRange.getValues();
+
+  var deleteRowSet = {};
   allocations.forEach(function (a) {
-    var batchRow = a.batchRowNumber;
-    var currentRemaining = toNumber_(
-      purchaseSheet.getRange(batchRow, remainingCol, 1, 1).getValue(),
-    );
-    var restored = currentRemaining + toNumber_(a.consumedQuantity);
-    purchaseSheet.getRange(batchRow, remainingCol, 1, 1).setValue(restored);
+    deleteRowSet[a._rowNumber] = true;
   });
 
-  // remove allocation records
-  var allocSheet = getSalesAllocationsSheet_();
-  for (var i = allocations.length - 1; i >= 0; i -= 1) {
-    allocSheet.deleteRow(allocations[i]._rowNumber);
+  var keepRows = [allRows[0]]; // header
+  for (var k = 1; k < allRows.length; k++) {
+    var sheetRowNum = k + 2; // convert 0-based index to 1-based row number
+    if (!deleteRowSet[sheetRowNum]) {
+      keepRows.push(allRows[k]);
+    }
+  }
+
+  if (keepRows.length < allRows.length) {
+    allocDataRange.clearContent();
+    allocSheet
+      .getRange(1, 1, keepRows.length, keepRows[0].length)
+      .setValues(keepRows);
   }
 
   // PERFORMANCE: Invalidate stock map cache since remaining quantities changed
+  // Also invalidate related caches that depend on purchase/item data
   invalidateStockMapCache_();
+  invalidatePurchasesByItemMapCache_();
+  invalidateSaleLookupMapCache_();
+  invalidateItemLookupMapCache_();
 }
