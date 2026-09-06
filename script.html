@@ -174,6 +174,7 @@
       purchasesTableBody: "#purchases-table-body",
       purchasesCount: "#purchases-count",
       purchasesSummary: "#purchases-summary",
+      purchasesPaginationSummary: "#purchases-pagination-summary",
       purchasesPagination: "#purchases-pagination",
       purchasesPrev: "[data-purchases-prev]",
       purchasesNext: "[data-purchases-next]",
@@ -197,6 +198,7 @@
       salesTableBody: "#sales-table-body",
       salesCount: "#sales-count",
       salesSummary: "#sales-summary",
+      salesPaginationSummary: "#sales-pagination-summary",
       salesPagination: "#sales-pagination",
       salesPrev: "[data-sales-prev]",
       salesNext: "[data-sales-next]",
@@ -322,9 +324,25 @@
 
     function init() {
       cachePages();
+      restoreSidebarState();
       bindEvents();
       hideAllViews();
       loadBootstrap();
+    }
+
+    function restoreSidebarState() {
+      try {
+        const app = document.querySelector(selectors.app);
+        if (!app) return;
+        if (window.innerWidth > 900) {
+          const saved = localStorage.getItem("app_sidebar_state");
+          // Default to expanded; restore collapsed if saved
+          app.dataset.sidebar = (saved === "collapsed") ? "collapsed" : "expanded";
+        } else {
+          // Mobile: start with drawer closed
+          app.dataset.sidebar = "closed";
+        }
+      } catch (e) {}
     }
 
     function hideAllViews() {
@@ -361,8 +379,51 @@
       });
 
       document
-        .querySelector(selectors.sidebarToggle)
-        .addEventListener("click", toggleSidebar);
+        .querySelectorAll(
+          `${selectors.sidebarToggle}, [data-action="toggle-sidebar"]`,
+        )
+        .forEach((btn) => {
+          btn.addEventListener("click", toggleSidebar);
+        });
+
+      const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
+      if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener("click", closeSidebar);
+      }
+
+      // Close mobile drawer on Escape key
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          const app = document.querySelector(selectors.app);
+          if (app && app.dataset.sidebar === "open") {
+            closeSidebar();
+          }
+        }
+      });
+
+      window.addEventListener(
+        "resize",
+        debounce(() => {
+          const app = document.querySelector(selectors.app);
+          if (!app) return;
+          if (window.innerWidth > 900) {
+            // Going to desktop: restore saved desktop state
+            if (app.dataset.sidebar === "open" || app.dataset.sidebar === "closed") {
+              try {
+                const saved = localStorage.getItem("app_sidebar_state");
+                app.dataset.sidebar = (saved === "collapsed") ? "collapsed" : "expanded";
+              } catch(e) {
+                app.dataset.sidebar = "expanded";
+              }
+            }
+          } else {
+            // Going to mobile: close drawer if open
+            if (app.dataset.sidebar === "open") {
+              app.dataset.sidebar = "closed";
+            }
+          }
+        }, 150),
+      );
 
       document.querySelector(selectors.globalSearch).addEventListener(
         "input",
@@ -1284,15 +1345,22 @@
         const batchNumber = row.batchNumber || "-";
         const remaining = row.remainingQuantity ?? row.remaining ?? 0;
 
-        const expDate = row.expiryDate ? new Date(row.expiryDate) : null;
-        const daysToExpiry = row.daysToExpiry;
+        const expDate = row.expiryDate ? parseDateSafe_(row.expiryDate) : null;
+        let daysToExpiry = row.daysToExpiry;
+        if (typeof daysToExpiry !== "number" && expDate) {
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          const expCopy = new Date(expDate);
+          expCopy.setHours(0, 0, 0, 0);
+          daysToExpiry = Math.ceil((expCopy - now) / (1000 * 60 * 60 * 24));
+        }
 
         appendCell(tr, itemName);
         appendCell(tr, batchNumber);
         appendCell(tr, remaining);
 
         if (expDate && !Number.isNaN(expDate.getTime())) {
-          appendCell(tr, formatters.date.format(expDate));
+          appendCell(tr, formatDate(expDate));
         } else {
           appendCell(tr, "-");
         }
@@ -1303,7 +1371,7 @@
         if (typeof daysToExpiry === "number") {
           if (daysToExpiry < 0) {
             statusBadge.classList.add("status-danger");
-            statusBadge.textContent = `Expired (${typeof daysToExpiry === "number" ? Math.abs(daysToExpiry) : 0}d)`;
+            statusBadge.textContent = `Expired (${Math.abs(daysToExpiry)}d)`;
           } else if (daysToExpiry <= 30) {
             statusBadge.classList.add("status-warning");
             statusBadge.textContent = `Expiring (${daysToExpiry}d)`;
@@ -2034,12 +2102,37 @@
 
     function toggleSidebar() {
       const app = document.querySelector(selectors.app);
-      const isOpen = app.dataset.sidebarOpen === "true";
-      app.dataset.sidebarOpen = String(!isOpen);
+      if (!app) return;
+
+      if (window.innerWidth <= 900) {
+        // Mobile: toggle drawer open/closed
+        const isOpen = app.dataset.sidebar === "open";
+        app.dataset.sidebar = isOpen ? "closed" : "open";
+      } else {
+        // Desktop: toggle between expanded and collapsed rail
+        const isCollapsed = app.dataset.sidebar === "collapsed";
+        const nextState = isCollapsed ? "expanded" : "collapsed";
+        app.dataset.sidebar = nextState;
+        try {
+          localStorage.setItem("app_sidebar_state", nextState);
+        } catch (e) {}
+      }
+
+      // Sync aria-expanded on all toggle buttons
+      const isExpanded = app.dataset.sidebar === "expanded" || app.dataset.sidebar === "open";
+      document.querySelectorAll(selectors.sidebarToggle + ', [data-action="toggle-sidebar"]')
+        .forEach(btn => btn.setAttribute("aria-expanded", String(isExpanded)));
     }
 
     function closeSidebar() {
-      document.querySelector(selectors.app).dataset.sidebarOpen = "false";
+      const app = document.querySelector(selectors.app);
+      if (!app) return;
+      if (window.innerWidth <= 900) {
+        app.dataset.sidebar = "closed";
+      }
+      // Sync aria-expanded
+      document.querySelectorAll(selectors.sidebarToggle + ', [data-action="toggle-sidebar"]')
+        .forEach(btn => btn.setAttribute("aria-expanded", "false"));
     }
 
     function bindItemsModule() {
@@ -2675,7 +2768,7 @@
       tbody.innerHTML = "";
 
       if (!pageRows.length) {
-        tbody.appendChild(createEmptyRow(8, "No purchases found."));
+        tbody.appendChild(createEmptyRow(12, "No purchases found."));
       } else {
         pageRows.forEach((purchase) =>
           tbody.appendChild(createPurchaseRow(purchase)),
@@ -2686,13 +2779,15 @@
         selectors.purchasesCount,
         `${filteredPurchases.length} ${filteredPurchases.length === 1 ? "purchase" : "purchases"}`,
       );
+      const purchasePaginationText = getPurchasesPaginationSummary(
+        filteredPurchases.length,
+        start,
+        pageRows.length,
+      );
+      setText(selectors.purchasesPaginationSummary, purchasePaginationText);
       setText(
         selectors.purchasesSummary,
-        getPurchasesPaginationSummary(
-          filteredPurchases.length,
-          start,
-          pageRows.length,
-        ),
+        filteredPurchases.length === 0 ? "No purchases yet" : purchasePaginationText,
       );
 
       const paginationDiv = document.querySelector(
@@ -2730,22 +2825,30 @@
 
       const expiryCell = document.createElement("td");
       if (purchase.expiryDate) {
-        const expiryDate = new Date(purchase.expiryDate);
-        const daysToExpiry = Math.ceil(
-          (expiryDate - new Date()) / (1000 * 60 * 60 * 24),
-        );
-        const badge = document.createElement("span");
-        if (daysToExpiry < 0) {
-          badge.className = "status-badge status-danger";
-          badge.textContent = `Expired (${formatters.date.format(expiryDate)})`;
-        } else if (daysToExpiry <= 30) {
-          badge.className = "status-badge status-warning";
-          badge.textContent = `Expiring (${formatters.date.format(expiryDate)})`;
+        const expiryDate = parseDateSafe_(purchase.expiryDate);
+        if (expiryDate) {
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          const expCopy = new Date(expiryDate);
+          expCopy.setHours(0, 0, 0, 0);
+          const daysToExpiry = Math.ceil(
+            (expCopy - now) / (1000 * 60 * 60 * 24),
+          );
+          const badge = document.createElement("span");
+          if (daysToExpiry < 0) {
+            badge.className = "status-badge status-danger";
+            badge.textContent = `Expired (${formatDate(expiryDate)})`;
+          } else if (daysToExpiry <= 30) {
+            badge.className = "status-badge status-warning";
+            badge.textContent = `Expiring (${formatDate(expiryDate)})`;
+          } else {
+            badge.className = "status-badge status-active";
+            badge.textContent = formatDate(expiryDate);
+          }
+          expiryCell.appendChild(badge);
         } else {
-          badge.className = "status-badge status-active";
-          badge.textContent = formatters.date.format(expiryDate);
+          expiryCell.textContent = "-";
         }
-        expiryCell.appendChild(badge);
       } else {
         expiryCell.textContent = "-";
       }
@@ -3231,7 +3334,7 @@
       tbody.innerHTML = "";
 
       if (!pageRows.length) {
-        tbody.appendChild(createEmptyRow(8, "No sales found."));
+        tbody.appendChild(createEmptyRow(7, "No sales found."));
       } else {
         pageRows.forEach((sale) => tbody.appendChild(createSaleRow(sale)));
       }
@@ -3240,9 +3343,15 @@
         selectors.salesCount,
         `${filteredSales.length} ${filteredSales.length === 1 ? "sale" : "sales"}`,
       );
+      const salePaginationText = getSalesPaginationSummary(
+        filteredSales.length,
+        start,
+        pageRows.length,
+      );
+      setText(selectors.salesPaginationSummary, salePaginationText);
       setText(
         selectors.salesSummary,
-        getSalesPaginationSummary(filteredSales.length, start, pageRows.length),
+        filteredSales.length === 0 ? "No sales yet" : salePaginationText,
       );
 
       const paginationDiv = document.querySelector(selectors.salesPagination);
@@ -3423,12 +3532,12 @@
       }
     }
 
-    function initSaleItemTomSelect_(selectEl) {
+    function initSaleItemTomSelect_(selectEl, preselectedId) {
       if (!selectEl) return;
 
-      // If TomSelect already exists on this element, skip
+      // If TomSelect already exists on this element, destroy first
       if (selectEl.tomselect) {
-        return;
+        selectEl.tomselect.destroy();
       }
 
       // If TomSelect library is not loaded, fall back to native select
@@ -3439,45 +3548,63 @@
         return;
       }
 
-      // Collect current options from the select element
-      const options = [];
-      // TomSelect requires a non-empty options array for proper initialization
-      for (let i = 0; i < selectEl.options.length; i++) {
-        const opt = selectEl.options[i];
-        if (opt.value) {
-          options.push({
-            value: opt.value,
-            text: opt.textContent,
-          });
-        }
-      }
+      // Build rich options list from state items
+      const items = state.sales.items.length
+        ? state.sales.items
+        : state.items.records;
 
-      // Store the currently selected value before TomSelect replaces the DOM
-      const currentValue = selectEl.value;
+      const options = items.map((item) => {
+        const price = getItemSellingPrice_(item.id);
+        const stock = item.currentStock != null ? item.currentStock : 0;
+        const stockLabel = stock <= 0 ? "Out of stock" : `Stock: ${stock}`;
+        const priceLabel =
+          price > 0
+            ? `PKR ${price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : "No price set";
+        return {
+          value: item.id,
+          text: item.name,
+          label: `${item.name} | ${stockLabel} | ${priceLabel}`,
+          stock: stock,
+          price: price,
+          outOfStock: stock <= 0,
+        };
+      });
 
       // Create TomSelect instance with search capability
       const ts = new TomSelect(selectEl, {
         options: options,
+        items: preselectedId ? [preselectedId] : [],
+        valueField: "value",
+        labelField: "label",
+        searchField: ["text", "label"],
         create: false,
         maxItems: 1,
-        placeholder: "Search for an item...",
-        sortField: {
-          field: "text",
-          direction: "asc",
-        },
-        searchField: ["text"],
+        placeholder: "Search medicine / item...",
+        sortField: { field: "text", direction: "asc" },
         render: {
           option: function (data, escape) {
+            const stockBadge = data.outOfStock
+              ? `<span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;">Out of stock</span>`
+              : `<span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;">Stock: ${data.stock}</span>`;
+            const priceStr = data.price > 0
+              ? `<span style="font-weight:600;color:#0f172a;">PKR ${Number(data.price).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
+              : `<span style="color:#9ca3af;font-size:11px;">No price set</span>`;
             return (
-              '<div class="ts-option-sale">' + escape(data.text) + "</div>"
+              `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;gap:8px;">` +
+              `<span style="flex:1;font-size:13px;">${escape(data.text)}</span>` +
+              `<span style="display:flex;gap:6px;align-items:center;flex-shrink:0;">${stockBadge} ${priceStr}</span>` +
+              `</div>`
             );
           },
           item: function (data, escape) {
-            return '<div class="ts-item-sale">' + escape(data.text) + "</div>";
+            return `<div class="ts-item-sale">${escape(data.text)}</div>`;
+          },
+          no_results: function () {
+            return '<div class="no-results" style="padding:8px 12px;color:#6b7280;">No medicines found</div>';
           },
         },
         onChange: function (value) {
-          // Auto-populate unit price when an item is selected
           if (value) {
             const price = getItemSellingPrice_(value);
             const row = selectEl.closest(".sale-item-row");
@@ -3491,11 +3618,6 @@
           }
         },
       });
-
-      // Restore the selected value
-      if (currentValue) {
-        ts.setValue(currentValue, true);
-      }
 
       // Store reference on the element for cleanup
       selectEl.tomselect = ts;
@@ -3527,35 +3649,23 @@
 
       const row = document.createElement("div");
       row.className = "sale-item-row";
-      row.style.cssText =
-        "display:flex;gap:8px;align-items:center;margin-bottom:8px;";
+      row.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:8px;";
 
-      // Item select
+      // Item select — plain element, TomSelect will take over rendering.
+      // No options pre-populated here; TomSelect gets them from state.
       const select = document.createElement("select");
       select.name = `sale-item-${rowIndex}`;
       select.className = "sale-item-select";
-      select.style.cssText = "flex:2;min-width:150px;";
+      // Fixed width — no flex grow/shrink
+      select.style.cssText = "width:320px;min-width:220px;max-width:320px;";
       select.required = true;
-
-      // Populate with items
-      const items = state.sales.items.length
-        ? state.sales.items
-        : state.items.records;
-      items.forEach((item) => {
-        const price = getItemSellingPrice_(item.id);
-        const opt = document.createElement("option");
-        opt.value = item.id;
-        opt.textContent = `${item.name} — PKR ${price}`;
-        if (item.id === itemId) opt.selected = true;
-        select.appendChild(opt);
-      });
 
       // Quantity input
       const qtyInput = document.createElement("input");
       qtyInput.type = "number";
       qtyInput.name = `sale-qty-${rowIndex}`;
       qtyInput.className = "sale-qty-input";
-      qtyInput.style.cssText = "flex:1;min-width:60px;";
+      qtyInput.style.cssText = "width:72px;min-width:60px;flex:none;";
       qtyInput.min = "1";
       qtyInput.step = "1";
       qtyInput.value = quantity;
@@ -3566,17 +3676,11 @@
       priceInput.type = "number";
       priceInput.name = `sale-price-${rowIndex}`;
       priceInput.className = "sale-price-input";
-      priceInput.style.cssText = "flex:1;min-width:80px;";
+      priceInput.style.cssText = "width:100px;min-width:80px;flex:none;";
       priceInput.min = "0";
       priceInput.step = "0.01";
-      const initialPrice =
-        unitPrice ||
-        (itemId
-          ? getItemSellingPrice_(itemId)
-          : select.value
-            ? getItemSellingPrice_(select.value)
-            : 0);
-      priceInput.value = initialPrice;
+      // Start at 0 — will be filled automatically once an item is chosen
+      priceInput.value = unitPrice || 0;
       priceInput.required = true;
 
       // Track user modifications to auto-populated price
@@ -3588,7 +3692,7 @@
       removeBtn.type = "button";
       removeBtn.className = "button button-danger button-small";
       removeBtn.textContent = "×";
-      removeBtn.style.cssText = "flex:0 0 32px;";
+      removeBtn.style.cssText = "width:32px;flex:none;";
       removeBtn.addEventListener("click", () => removeSaleItemRow(row));
 
       row.appendChild(select);
@@ -3602,8 +3706,14 @@
 
       container.appendChild(row);
 
-      // Initialize TomSelect on the select element for searchable dropdown
-      initSaleItemTomSelect_(select);
+      // If editing an existing sale and itemId is provided, set it after TomSelect init
+      // and also pre-fill the unit price if not already given
+      initSaleItemTomSelect_(select, itemId || "");
+
+      if (itemId && !unitPrice) {
+        const price = getItemSellingPrice_(itemId);
+        if (price > 0) priceInput.value = price;
+      }
     }
 
     function removeSaleItemRow(row) {
@@ -4444,11 +4554,40 @@
 
           const badge = document.createElement("span");
           badge.className = "status-badge";
-          const st = row.nearestExpiryStatus || "OK";
-          if (st === "Expired") badge.classList.add("status-danger");
-          else if (st === "Expiring") badge.classList.add("status-warning");
-          else badge.classList.add("status-active");
-          badge.textContent = st;
+
+          const isExpired =
+            row.nearestExpiryStatus === "Expired" ||
+            (typeof row.nearestExpiryDays === "number" && row.nearestExpiryDays < 0);
+          const isOutOfStock = row.currentStock <= 0;
+          const isLowStock = row.currentStock <= row.minimumStock;
+          const isExpiring =
+            row.nearestExpiryStatus === "Expiring" ||
+            (typeof row.nearestExpiryDays === "number" &&
+              row.nearestExpiryDays >= 0 &&
+              row.nearestExpiryDays <= (state.inventory.expiryWarningDays || 30));
+
+          let statusText = "OK";
+          let statusClass = "status-active";
+
+          if (isExpired) {
+            statusText = "Expired";
+            statusClass = "status-danger";
+          } else if (isOutOfStock) {
+            statusText = "Out of Stock";
+            statusClass = "status-danger";
+          } else if (isLowStock) {
+            statusText = "Low Stock";
+            statusClass = "status-warning";
+          } else if (isExpiring) {
+            statusText = "Expiring Soon";
+            statusClass = "status-warning";
+          } else {
+            statusText = "OK";
+            statusClass = "status-active";
+          }
+
+          badge.classList.add(statusClass);
+          badge.textContent = statusText;
 
           const td = document.createElement("td");
           td.appendChild(badge);
@@ -4550,15 +4689,31 @@
 
       const rowsHtml = batches
         .map((b) => {
-          const exp = b.expiryDate ? formatDate(b.expiryDate) : "-";
+          const expDate = b.expiryDate ? parseDateSafe_(b.expiryDate) : null;
+          const exp = expDate ? formatDate(expDate) : "-";
           const rem = formatters.number.format(b.remainingQuantity || 0);
           const cost = formatters.currency.format(b.costPrice || 0);
           const sell = formatters.currency.format(b.sellingPrice || 0);
+
+          let expiryBadge = "";
+          if (expDate) {
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            const expCopy = new Date(expDate);
+            expCopy.setHours(0, 0, 0, 0);
+            const days = Math.ceil((expCopy - now) / (1000 * 60 * 60 * 24));
+            if (days < 0) {
+              expiryBadge = ` <span class="status-badge status-danger" style="margin-left: 6px; font-size: 11px;">Expired</span>`;
+            } else if (days <= 30) {
+              expiryBadge = ` <span class="status-badge status-warning" style="margin-left: 6px; font-size: 11px;">Expiring (${days}d)</span>`;
+            }
+          }
+
           return `
             <tr>
               <td><strong style="color: var(--primary, #2563eb);">${b.batchNumber || "-"}</strong></td>
               <td class="numeric-cell">${rem}</td>
-              <td>${exp}</td>
+              <td>${exp}${expiryBadge}</td>
               <td class="numeric-cell">${cost}</td>
               <td class="numeric-cell">${sell}</td>
             </tr>

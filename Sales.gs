@@ -727,7 +727,7 @@ function getSalesCustomers_() {
    ================================================================ */
 
 /**
- * Server-callable: returns invoice data for a sale.
+ * Server-callable: returns invoice data for a sale with pharmacy batch tracking.
  */
 function getSaleInvoice(saleId, token) {
   try {
@@ -744,21 +744,46 @@ function getSaleInvoice(saleId, token) {
       itemMap[allItems[i].id] = allItems[i];
     }
 
+    var allAllocations = getSalesAllocationsRecords_();
+    var saleAllocations = allAllocations.filter(function (a) {
+      return a.saleId === sale.id;
+    });
+    var purchaseMap = buildPurchaseLookupMap_();
+
     var invoiceItems = [];
     for (var j = 0; j < items.length; j++) {
       var item = items[j];
       var itemRecord = itemMap[item.itemId] || {};
+
+      // Retrieve batch & expiry details for dispensed medicine
+      var itemAllocs = saleAllocations.filter(function (a) {
+        return normalizeText_(a.itemId) === normalizeText_(item.itemId);
+      });
+
+      var batchDetails = [];
+      itemAllocs.forEach(function (al) {
+        var p = purchaseMap[al.purchaseId] || {};
+        var bNum = p.batchNumber || al.purchaseId || "-";
+        var expStr = p.expiryDate ? formatDisplayDate_(p.expiryDate) : "-";
+        batchDetails.push({
+          batchNumber: bNum,
+          expiryDate: expStr,
+          quantity: al.consumedQuantity,
+        });
+      });
+
       invoiceItems.push({
         name: itemRecord.name || item.itemId,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
+        batches: batchDetails,
       });
     }
 
     return successResponse_({
       invoiceNumber: sale.invoiceNumber,
-      saleDate: sale.saleDate,
+      saleDate: formatDisplayDate_(sale.saleDate),
       customerName: sale.customerName,
       customerPhone: sale.customerPhone,
       items: invoiceItems,
@@ -793,10 +818,20 @@ function generateInvoiceHtml_(invoice) {
   var itemsHtml = "";
   for (var i = 0; i < invoice.items.length; i++) {
     var item = invoice.items[i];
+    var batchText = "";
+    if (item.batches && item.batches.length) {
+      batchText = item.batches
+        .map(function (b) {
+          return "Batch: " + escapeHtml_(b.batchNumber) + " (Exp: " + escapeHtml_(b.expiryDate) + ")";
+        })
+        .join(", ");
+    }
+
     itemsHtml +=
       "<tr>" +
       "<td>" +
-      escapeHtml_(item.name || "Unknown") +
+      "<div><strong>" + escapeHtml_(item.name || "Unknown") + "</strong></div>" +
+      (batchText ? "<div style='font-size:11px;color:#6b7280;margin-top:2px;'>" + batchText + "</div>" : "") +
       "</td>" +
       "<td style='text-align:center'>" +
       item.quantity +
@@ -828,7 +863,7 @@ function generateInvoiceHtml_(invoice) {
     "@media print{body{margin:20px;}.no-print{display:none!important;}}" +
     "</style></head><body>" +
     "<div class='invoice-header'>" +
-    "<h1>INVOICE</h1>" +
+    "<h1>PHARMACY INVOICE</h1>" +
     "<p class='meta'>Invoice No: <strong>" +
     escapeHtml_(invoice.invoiceNumber || "-") +
     "</strong></p>" +
@@ -848,7 +883,7 @@ function generateInvoiceHtml_(invoice) {
     "</p>" +
     "</div>" +
     "<table>" +
-    "<thead><tr><th>Item</th><th style='text-align:center'>Qty</th><th style='text-align:right'>Unit Price</th><th style='text-align:right'>Total</th></tr></thead>" +
+    "<thead><tr><th>Item & Batch Details</th><th style='text-align:center'>Qty</th><th style='text-align:right'>Unit Price</th><th style='text-align:right'>Total</th></tr></thead>" +
     "<tbody>" +
     itemsHtml +
     "</tbody>" +
@@ -861,13 +896,13 @@ function generateInvoiceHtml_(invoice) {
     "</tr>" +
     "</tfoot>" +
     "</table>" +
-    "<div class='footer'>Thank you for your business!</div>" +
+    "<div class='footer'>Thank you for your business! Please check medicines before leaving the counter.</div>" +
     "</body></html>"
   );
 }
 
 /* ================================================================
-   FIFO Allocation Engine
+   FIFO / FEFO Allocation Engine
    ================================================================ */
 
 function getSalesAllocationsSheet_() {
@@ -899,7 +934,7 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
       );
     });
   } else {
-    // Fallback: full scan (kept for backward compatibility)
+    // Fallback: full scan
     purchases = getPurchaseRecords_().filter(function (p) {
       var isExpired = p.expiryDate && p.expiryDate < todayStr;
       return (
@@ -910,6 +945,7 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
     });
   }
 
+  // Sort by nearest expiry date first (FEFO)
   purchases.sort(function (a, b) {
     var dateA = new Date(a.expiryDate || "9999-12-31").getTime();
     var dateB = new Date(b.expiryDate || "9999-12-31").getTime();
@@ -920,13 +956,11 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
   var allocSheet = getSalesAllocationsSheet_();
   var now = formatDateTime_(new Date());
 
-  // PERFORMANCE: Hoist column index map OUTSIDE the loop — compute once
   var purchaseHeaders = getPurchasesHeaders_();
   var colMap = getPurchasesColumnIndexMap_(purchaseSheet, purchaseHeaders);
   var remainingCol = colMap["RemainingQuantity"] || 14;
 
   var allocations = [];
-  // PERFORMANCE: Batch remaining-quantity updates instead of per-batch setValue calls
   var remainingUpdates = [];
 
   for (var i = 0; i < purchases.length; i++) {
@@ -939,13 +973,13 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
     var consumed = Math.min(available, qty);
     if (consumed <= 0) continue;
 
-    // Collect update for batch write at end of loop
+    // Collect update for exact batch row
     remainingUpdates.push({
       rowNumber: batch._rowNumber,
       newValue: available - consumed,
     });
 
-    // record allocation
+    // Record allocation
     var allocId = "ALC-" + Utilities.getUuid().split("-")[0].toUpperCase();
     allocSheet.appendRow([
       allocId,
@@ -970,21 +1004,11 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
     qty -= consumed;
   }
 
-  // PERFORMANCE: Batch-write all remaining quantity updates in a single call
-  if (remainingUpdates.length === 1) {
+  // Exact row write: ensures non-contiguous purchase batches are never corrupted
+  for (var u = 0; u < remainingUpdates.length; u++) {
     purchaseSheet
-      .getRange(remainingUpdates[0].rowNumber, remainingCol, 1, 1)
-      .setValue(remainingUpdates[0].newValue);
-  } else if (remainingUpdates.length > 1) {
-    var rows = remainingUpdates.map(function (u) {
-      return u.rowNumber;
-    });
-    var values = remainingUpdates.map(function (u) {
-      return [u.newValue];
-    });
-    purchaseSheet
-      .getRange(rows[0], remainingCol, rows.length, 1)
-      .setValues(values);
+      .getRange(remainingUpdates[u].rowNumber, remainingCol, 1, 1)
+      .setValue(remainingUpdates[u].newValue);
   }
 
   if (qty > 0) {
@@ -997,7 +1021,7 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
 function restoreSaleAllocations_(saleId) {
   var normalizedSaleId = normalizeText_(saleId);
 
-  // Use cached allocation records (getSalesAllocationsRecords_ uses CacheService)
+  // Use cached allocation records
   var allocs = getSalesAllocationsRecords_();
   var allocations = allocs.filter(function (a) {
     return a.saleId === normalizedSaleId;
@@ -1010,38 +1034,30 @@ function restoreSaleAllocations_(saleId) {
   var colMap = getPurchasesColumnIndexMap_(purchaseSheet, purchaseHeaders);
   var remainingCol = colMap["RemainingQuantity"] || 14;
 
-  // PERFORMANCE: Batch-read all affected remaining-quantity cells in ONE call
-  var batchRows = allocations.map(function (a) {
-    return a.batchRowNumber;
+  // Group consumed quantities by exact batch row number to sum them
+  var restoreByRow = {};
+  allocations.forEach(function (a) {
+    var rowNum = a.batchRowNumber;
+    if (!restoreByRow[rowNum]) {
+      restoreByRow[rowNum] = 0;
+    }
+    restoreByRow[rowNum] += toNumber_(a.consumedQuantity);
   });
-  var minRow = Math.min.apply(null, batchRows);
-  var maxRow = Math.max.apply(null, batchRows);
-  var numRows = maxRow - minRow + 1;
 
-  var range = purchaseSheet.getRange(minRow, remainingCol, numRows, 1);
-  var values = range.getValues();
-
-  // Build row-number to array-offset lookup for O(1) access
-  var rowToAllocIndex = {};
-  for (var i = 0; i < batchRows.length; i++) {
-    rowToAllocIndex[batchRows[i]] = i;
-  }
-
-  // Compute restored quantities in memory
-  for (var r = 0; r < numRows; r++) {
-    var actualRow = minRow + r;
-    var allocIdx = rowToAllocIndex[actualRow];
-    if (allocIdx !== undefined) {
-      values[r][0] =
-        toNumber_(values[r][0]) +
-        toNumber_(allocations[allocIdx].consumedQuantity);
+  // Restore each affected batch row directly
+  for (var rowNumStr in restoreByRow) {
+    if (restoreByRow.hasOwnProperty(rowNumStr)) {
+      var rowNumber = parseInt(rowNumStr, 10);
+      var currentVal = toNumber_(
+        purchaseSheet.getRange(rowNumber, remainingCol, 1, 1).getValue(),
+      );
+      purchaseSheet
+        .getRange(rowNumber, remainingCol, 1, 1)
+        .setValue(currentVal + restoreByRow[rowNumStr]);
     }
   }
 
-  // PERFORMANCE: Batch-write all restored quantities in a single call
-  range.setValues(values);
-
-  // PERFORMANCE: Batch-delete allocation rows using read-filter-rewrite
+  // Batch-delete allocation records from SalesAllocations sheet
   var allocSheet = getSalesAllocationsSheet_();
   var allocDataRange = allocSheet.getDataRange();
   var allRows = allocDataRange.getValues();
@@ -1053,7 +1069,7 @@ function restoreSaleAllocations_(saleId) {
 
   var keepRows = [allRows[0]]; // header
   for (var k = 1; k < allRows.length; k++) {
-    var sheetRowNum = k + 2; // convert 0-based index to 1-based row number
+    var sheetRowNum = k + 2;
     if (!deleteRowSet[sheetRowNum]) {
       keepRows.push(allRows[k]);
     }
@@ -1066,8 +1082,7 @@ function restoreSaleAllocations_(saleId) {
       .setValues(keepRows);
   }
 
-  // PERFORMANCE: Invalidate stock map cache since remaining quantities changed
-  // Also invalidate related caches that depend on purchase/item data
+  // Invalidate stock and related lookup caches
   invalidateStockMapCache_();
   invalidatePurchasesByItemMapCache_();
   invalidateSaleLookupMapCache_();

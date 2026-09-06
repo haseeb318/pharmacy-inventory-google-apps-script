@@ -19,6 +19,7 @@
     --radius: 8px;
     --topbar-height: 76px;
     --sidebar-width: 264px;
+    --sidebar-collapsed-width: 70px;
     --label: #344054;
   }
 
@@ -53,6 +54,9 @@
   body {
     margin: 0;
     min-height: 100%;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
     background: var(--bg);
     color: var(--text);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -127,37 +131,89 @@
     border: 0;
   }
 
-  .app-shell {
-    display: flex;
-    min-height: 100vh;
+  /* ════════════════════════════════════════════════════
+     APP SHELL  –  CSS Grid layout (no more flex+margin)
+     Sidebar width is driven by --sb-w CSS variable so
+     the content column is always exactly 1fr of the
+     remaining space. No overflow math needed.
+     ════════════════════════════════════════════════════ */
+  :root {
+    --sb-w: var(--sidebar-width);
+    /* 264px expanded */
   }
 
+  .app-shell {
+    display: grid;
+    grid-template-columns: var(--sb-w) 1fr;
+    min-height: 100vh;
+    transition: grid-template-columns 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ── Collapsed desktop: shrink the first grid column ── */
+  .app-shell[data-sidebar="collapsed"] {
+    --sb-w: var(--sidebar-collapsed-width);
+    /* 70px */
+  }
+
+  /* ── Sidebar (Desktop): normal grid child, sticky to viewport height) ── */
   .sidebar {
-    position: fixed;
-    inset: 0 auto 0 0;
-    z-index: 30;
-    width: var(--sidebar-width);
+    grid-column: 1;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    width: var(--sb-w);
     background: var(--sidebar);
     color: var(--sidebar-text);
     padding: 18px 14px;
-    transform: translateX(0);
-    transition: transform 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+      padding 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 30;
   }
 
+  /* Sidebar backdrop – mobile-only overlay dimmer */
+  .sidebar-backdrop {
+    display: none;
+  }
+
+  /* ── Brand area ── */
   .brand {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
-    min-height: 48px;
-    margin-bottom: 24px;
-    padding: 0 8px;
+    min-height: 56px;
+    margin-bottom: 20px;
+    padding: 0 2px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .brand-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .brand-text {
+    min-width: 0;
+    overflow: hidden;
+    opacity: 1;
+    transition: opacity 0.18s ease, width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    width: auto;
   }
 
   .brand-mark {
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    flex-shrink: 0;
+    width: 38px;
+    height: 38px;
     border-radius: var(--radius);
     background: var(--primary);
     color: #fff;
@@ -165,18 +221,49 @@
   }
 
   .brand-name {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 800;
+    white-space: nowrap;
   }
 
   .brand-subtitle {
     color: #9ca3af;
-    font-size: 12px;
+    font-size: 11px;
+    white-space: nowrap;
   }
 
+  /* ── Close / X button: desktop hidden, mobile visible ── */
+  .sidebar-close-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: #e5e7eb;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+  }
+
+  .sidebar-close-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #ef4444;
+  }
+
+  /* ── Nav menu ── */
   .menu {
-    display: grid;
-    gap: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .menu-link {
@@ -186,34 +273,211 @@
     min-height: 42px;
     border-radius: var(--radius);
     color: #cbd5e1;
-    padding: 10px 12px;
+    padding: 10px 10px;
+    position: relative;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
     transition:
       background 0.15s ease,
       color 0.15s ease;
   }
 
-  .menu-link:hover,
+  /* Active indicator – left accent line */
   .menu-link.active {
     background: var(--sidebar-soft);
+    color: #fff;
+  }
+
+  .menu-link.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--primary);
+  }
+
+  .menu-link:hover {
+    background: rgba(255, 255, 255, 0.07);
     color: #fff;
   }
 
   .menu-icon {
     display: grid;
     place-items: center;
-    flex: 0 0 24px;
-    width: 24px;
-    height: 24px;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.08);
-    font-size: 11px;
-    font-weight: 800;
+    transition: background 0.15s ease;
   }
 
-  .app-main {
-    width: 100%;
+  .menu-link.active .menu-icon {
+    background: rgba(37, 99, 235, 0.3);
+  }
+
+  .menu-text {
+    flex: 1;
     min-width: 0;
-    margin-left: var(--sidebar-width);
+    font-size: 13.5px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 1;
+    transition: opacity 0.18s ease;
+  }
+
+  /* ── Sidebar collapse toggle (bottom of desktop sidebar) ── */
+  .sidebar-collapse-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: auto;
+    padding: 10px;
+    border-radius: var(--radius);
+    border: none;
+    background: transparent;
+    color: #6b7280;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .sidebar-collapse-btn:hover {
+    background: var(--sidebar-soft);
+    color: #fff;
+  }
+
+  .sidebar-collapse-btn .collapse-icon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    transition: transform 0.28s ease;
+  }
+
+  .sidebar-collapse-btn .collapse-label {
+    overflow: hidden;
+    opacity: 1;
+    transition: opacity 0.18s ease;
+  }
+
+  /* ── App main – always 1fr of remaining grid space ── */
+  .app-main {
+    grid-column: 2;
+    min-width: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  /* ════════════════════════════════
+     DESKTOP COLLAPSED STATE
+     ════════════════════════════════ */
+  @media (min-width: 901px) {
+    .app-shell[data-sidebar="collapsed"] .sidebar {
+      padding: 18px 8px;
+      overflow: visible;
+      /* allow tooltip to overflow sidebar boundary */
+    }
+
+    /* Centre brand mark, hide text */
+    .app-shell[data-sidebar="collapsed"] .brand {
+      justify-content: center;
+    }
+
+    .app-shell[data-sidebar="collapsed"] .brand-info {
+      justify-content: center;
+    }
+
+    .app-shell[data-sidebar="collapsed"] .brand-text {
+      opacity: 0;
+      width: 0;
+      pointer-events: none;
+    }
+
+    /* Hide close btn (mobile only) */
+    .app-shell[data-sidebar="collapsed"] .sidebar-close-btn {
+      display: none;
+    }
+
+    /* Centred icon-only menu items */
+    .app-shell[data-sidebar="collapsed"] .menu-link {
+      justify-content: center;
+      padding: 10px 0;
+      overflow: visible;
+    }
+
+    /* Hide label text — keep it in DOM for tooltip */
+    .app-shell[data-sidebar="collapsed"] .menu-text {
+      opacity: 0;
+      width: 0;
+      pointer-events: none;
+      position: absolute;
+    }
+
+    /* Floating tooltip on hover */
+    .app-shell[data-sidebar="collapsed"] .menu-link:hover .menu-text {
+      opacity: 1;
+      width: auto;
+      position: absolute;
+      left: calc(100% + 10px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: #1e293b;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      white-space: nowrap;
+      z-index: 200;
+      pointer-events: none;
+    }
+
+    /* Tooltip arrow */
+    .app-shell[data-sidebar="collapsed"] .menu-link:hover .menu-text::before {
+      content: "";
+      position: absolute;
+      right: 100%;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 5px solid transparent;
+      border-right-color: #1e293b;
+    }
+
+    /* Rotate collapse chevron when collapsed */
+    .app-shell[data-sidebar="collapsed"] .collapse-icon {
+      transform: rotate(180deg);
+    }
+
+    /* Hide collapse btn label text */
+    .app-shell[data-sidebar="collapsed"] .collapse-label {
+      opacity: 0;
+      width: 0;
+      pointer-events: none;
+    }
+
+    /* Hide expanded-state close btn entirely */
+    .sidebar-close-btn {
+      display: none !important;
+    }
   }
 
   .topbar {
@@ -225,18 +489,29 @@
     justify-content: space-between;
     gap: 18px;
     min-height: var(--topbar-height);
+    width: 100%;
+    overflow: hidden;
     border-bottom: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.92);
     padding: 14px 24px;
     backdrop-filter: blur(12px);
   }
 
-  .topbar-left,
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
   .topbar-right {
     display: flex;
     align-items: center;
     gap: 14px;
     min-width: 0;
+    flex-shrink: 0;
   }
 
   .topbar h1 {
@@ -251,7 +526,32 @@
   }
 
   .menu-toggle {
-    display: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+  }
+
+  .menu-toggle:hover {
+    background: var(--surface-muted);
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+
+  .menu-toggle:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
 
   .global-search {
@@ -262,7 +562,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    min-width: 190px;
+    min-width: 0;
+    max-width: 220px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: #fff;
@@ -299,6 +600,8 @@
   .content {
     min-height: calc(100vh - var(--topbar-height));
     padding: 24px;
+    width: 100%;
+    overflow: hidden;
   }
 
   .page-section {
@@ -345,7 +648,7 @@
   }
 
   .dashboard-secondary-grid {
-    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
     margin-top: 16px;
   }
 
@@ -395,7 +698,93 @@
   }
 
   .table-wrap {
+    width: 100%;
+    max-width: 100%;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── Pagination bar shared across all modules ── */
+  .pagination,
+  .pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+
+  .pagination span,
+  .pagination-bar span {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 500;
+    flex: 1;
+    text-align: center;
+  }
+
+  /* Prev / Next buttons inside pagination */
+  .pagination .button,
+  .pagination-bar .button {
+    min-width: 96px;
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: var(--radius);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .pagination .button:not(:disabled):hover,
+  .pagination-bar .button:not(:disabled):hover {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+  }
+
+  .pagination .button:disabled,
+  .pagination-bar .button:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+
+  /* prev arrow */
+  [data-sales-prev]::before,
+  [data-purchases-prev]::before,
+  [data-items-prev]::before,
+  [data-reports-prev]::before,
+  [data-inventory-prev]::before,
+  [data-users-prev]::before {
+    content: "←";
+    font-size: 14px;
+  }
+
+  /* next arrow */
+  [data-sales-next]::after,
+  [data-purchases-next]::after,
+  [data-items-next]::after,
+  [data-reports-next]::after,
+  [data-inventory-next]::after,
+  [data-users-next]::after {
+    content: "→";
+    font-size: 14px;
+  }
+
+  /* pagination-bar has action wrapper — keep it aligned */
+  .pagination-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .numeric-cell {
@@ -534,16 +923,22 @@
   .status-badge.status-active {
     background: #dcfce7;
     color: #166534;
+    border: 1px solid #bbf7d0;
   }
 
-  .status-badge.status-inactive {
+  .status-badge.status-inactive,
+  .status-badge.status-danger,
+  .status-danger {
     background: #fee2e2;
     color: #991b1b;
+    border: 1px solid #fca5a5;
+    font-weight: 600;
   }
 
   .status-badge.status-warning {
     background: #fef3c7;
     color: #92400e;
+    border: 1px solid #fde68a;
   }
 
   .segmented-control {
@@ -799,13 +1194,55 @@
     border-radius: 8px;
     border: 1px solid var(--border);
     transition: border-color 0.2s ease;
+    flex-wrap: nowrap;
   }
 
   .sale-item-row:hover {
     border-color: var(--primary);
   }
 
-  .sale-item-row .sale-item-select,
+  /* TomSelect wrapper inside sale rows — fixed width, no flex grow */
+  .sale-item-row .ts-wrapper {
+    width: 320px !important;
+    min-width: 220px !important;
+    max-width: 320px !important;
+    flex: none !important;
+  }
+
+  .sale-item-row .ts-control {
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+    padding: 7px 10px !important;
+    font-size: 13px !important;
+    background: #fff !important;
+    min-height: 38px !important;
+    cursor: text;
+  }
+
+  .sale-item-row .ts-control:focus-within {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1) !important;
+  }
+
+  .sale-item-row .ts-dropdown {
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+    z-index: 9999 !important;
+    min-width: 380px !important;
+  }
+
+  .sale-item-row .ts-dropdown .option {
+    padding: 8px 12px !important;
+    border-bottom: 1px solid #f3f4f6;
+    cursor: pointer;
+  }
+
+  .sale-item-row .ts-dropdown .option:hover,
+  .sale-item-row .ts-dropdown .option.active {
+    background: var(--surface-muted) !important;
+  }
+
   .sale-item-row .sale-qty-input,
   .sale-item-row .sale-price-input {
     border: 1px solid var(--border);
@@ -814,9 +1251,17 @@
     font-size: 13px;
     background: #fff;
     transition: border-color 0.2s ease;
+    flex: none;
   }
 
-  .sale-item-row .sale-item-select:focus,
+  .sale-item-row .sale-qty-input {
+    width: 72px;
+  }
+
+  .sale-item-row .sale-price-input {
+    width: 100px;
+  }
+
   .sale-item-row .sale-qty-input:focus,
   .sale-item-row .sale-price-input:focus {
     border-color: var(--primary);
@@ -824,7 +1269,8 @@
   }
 
   .sale-item-row .button-small {
-    flex: 0 0 32px;
+    flex: none;
+    width: 32px;
     min-height: 32px;
     padding: 0;
     font-size: 16px;
@@ -844,15 +1290,14 @@
       gap: 6px;
     }
 
-    .sale-item-row .sale-item-select {
-      flex: 1 1 100% !important;
-      min-width: 0 !important;
+    .sale-item-row .ts-wrapper {
+      width: 100% !important;
+      max-width: 100% !important;
     }
 
     .sale-item-row .sale-qty-input,
     .sale-item-row .sale-price-input {
-      flex: 1 1 40% !important;
-      min-width: 0 !important;
+      width: calc(50% - 4px) !important;
     }
   }
 
@@ -934,6 +1379,7 @@
       opacity: 0;
       transform: translateY(4px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
@@ -951,37 +1397,153 @@
     }
   }
 
-  @media (max-width: 860px) {
+  /* ════════════════════════════════════════════════════════
+     MOBILE / TABLET  ≤ 900px
+     Sidebar becomes a fixed overlay drawer.
+     Content fills the whole viewport (grid col override).
+     ════════════════════════════════════════════════════════ */
+  @media (max-width: 900px) {
+
+    /* Single-column grid: content fills full width without overflow */
+    .app-shell {
+      grid-template-columns: 100%;
+      width: 100%;
+      max-width: 100vw;
+      overflow-x: hidden;
+    }
+
     .app-main {
-      margin-left: 0;
+      grid-column: 1;
+      width: 100%;
+      max-width: 100vw;
+      overflow-x: hidden;
     }
 
+    /* Sidebar: hidden off-screen as fixed overlay */
     .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: min(280px, 82vw) !important;
+      height: 100dvh;
+      z-index: 50;
       transform: translateX(-100%);
+      transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow-y: auto;
+      overflow-x: hidden;
+      box-shadow: none;
     }
 
-    .app-shell[data-sidebar-open="true"] .sidebar {
+    /* Drawer open state */
+    .app-shell[data-sidebar="open"] .sidebar {
       transform: translateX(0);
+      box-shadow: 8px 0 36px rgba(0, 0, 0, 0.45);
     }
 
-    .menu-toggle {
+    /* Backdrop: dimmer behind drawer covering entire screen */
+    .app-shell[data-sidebar="open"] .sidebar-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 45;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      cursor: pointer;
+    }
+
+    /* Show ✕ close button inside mobile drawer */
+    .sidebar-close-btn {
       display: inline-flex;
     }
 
-    .topbar {
-      align-items: flex-start;
-      flex-direction: column;
+    /* Restore full-width menu items (not icon-only) */
+    .menu-link {
+      justify-content: flex-start;
+      padding: 10px 14px;
+      overflow: hidden;
     }
 
-    .topbar-left,
-    .topbar-right,
-    .global-search,
-    .user-chip {
+    .menu-text {
+      opacity: 1;
+      width: auto;
+      position: static;
+      pointer-events: auto;
+    }
+
+    /* Hide collapse btn on mobile */
+    .sidebar-collapse-btn {
+      display: none;
+    }
+
+    /* Topbar mobile styling */
+    .topbar {
+      padding: 10px 14px;
+      gap: 10px;
+      min-height: 58px;
       width: 100%;
+      max-width: 100vw;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    .topbar-left {
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .topbar-titles {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .topbar h1 {
+      font-size: 16px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .topbar p {
+      display: none;
+    }
+
+    .topbar-right {
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .global-search {
+      width: min(150px, 28vw);
+    }
+
+    .user-chip {
+      padding: 4px 6px;
+      gap: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .user-meta {
+      display: none;
     }
 
     .content {
-      padding: 18px;
+      padding: 16px 12px;
+      width: 100%;
+      max-width: 100vw;
+      box-sizing: border-box;
+      overflow-x: hidden;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .global-search {
+      display: none;
+    }
+
+    .topbar {
+      padding: 8px 10px;
     }
   }
 
@@ -1134,15 +1696,15 @@
     transition: left 0.2s ease;
   }
 
-  .toggle-switch input:checked + .toggle-track {
+  .toggle-switch input:checked+.toggle-track {
     background: var(--primary);
   }
 
-  .toggle-switch input:checked + .toggle-track .toggle-thumb {
+  .toggle-switch input:checked+.toggle-track .toggle-thumb {
     left: 23px;
   }
 
-  .toggle-switch input:disabled + .toggle-track {
+  .toggle-switch input:disabled+.toggle-track {
     opacity: 0.45;
     cursor: not-allowed;
   }
@@ -1166,6 +1728,7 @@
     margin-right: 6px;
     font-size: 15px;
   }
+
   /* ── Dashboard & Dedicated Login Styles ── */
   /* Dashboard KPI Cards */
   .dash-kpi-grid {
@@ -1174,16 +1737,19 @@
     gap: 16px;
     margin-bottom: 20px;
   }
+
   @media (max-width: 900px) {
     .dash-kpi-grid {
       grid-template-columns: repeat(2, 1fr);
     }
   }
+
   @media (max-width: 540px) {
     .dash-kpi-grid {
       grid-template-columns: 1fr;
     }
   }
+
   .dash-kpi-card {
     background: var(--surface);
     border-radius: var(--radius);
@@ -1197,22 +1763,28 @@
       transform 0.18s,
       box-shadow 0.18s;
   }
+
   .dash-kpi-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
   }
+
   .dash-kpi-blue {
     border-left-color: #2563eb;
   }
+
   .dash-kpi-green {
     border-left-color: #16a34a;
   }
+
   .dash-kpi-amber {
     border-left-color: #d97706;
   }
+
   .dash-kpi-red {
     border-left-color: #dc2626;
   }
+
   .dash-kpi-icon {
     font-size: 22px;
     width: 48px;
@@ -1223,28 +1795,34 @@
     justify-content: center;
     flex-shrink: 0;
   }
+
   .dash-kpi-blue .dash-kpi-icon {
     background: #eff6ff;
     color: #2563eb;
   }
+
   .dash-kpi-green .dash-kpi-icon {
     background: #f0fdf4;
     color: #16a34a;
   }
+
   .dash-kpi-amber .dash-kpi-icon {
     background: #fffbeb;
     color: #d97706;
   }
+
   .dash-kpi-red .dash-kpi-icon {
     background: #fef2f2;
     color: #dc2626;
   }
+
   .dash-kpi-body {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
   }
+
   .dash-kpi-label {
     font-size: 11px;
     font-weight: 600;
@@ -1252,16 +1830,19 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
+
   .dash-kpi-value {
     font-size: 24px;
     font-weight: 800;
     color: var(--text);
     line-height: 1.1;
   }
+
   .dash-kpi-sub {
     font-size: 11px;
     color: var(--muted);
   }
+
   /* Dashboard Two-Column Grid */
   .dash-two-col {
     display: grid;
@@ -1269,11 +1850,13 @@
     gap: 16px;
     margin-bottom: 20px;
   }
+
   @media (max-width: 800px) {
     .dash-two-col {
       grid-template-columns: 1fr;
     }
   }
+
   /* Live dot */
   .live-dot {
     display: inline-block;
@@ -1286,22 +1869,27 @@
     vertical-align: middle;
     flex-shrink: 0;
   }
+
   @keyframes pulse-dot {
+
     0%,
     100% {
       opacity: 1;
       transform: scale(1);
     }
+
     50% {
       opacity: 0.5;
       transform: scale(1.35);
     }
   }
+
   .dash-meta {
     display: flex;
     align-items: center;
     gap: 4px;
   }
+
   .dash-live-badge {
     display: inline-flex;
     align-items: center;
@@ -1314,6 +1902,7 @@
     padding: 3px 10px;
     border: 1px solid #bbf7d0;
   }
+
   /* Activity Chart */
   .dash-chart {
     padding: 4px 0;
@@ -1321,11 +1910,13 @@
     flex-direction: column;
     gap: 16px;
   }
+
   .dash-chart-row {
     display: flex;
     align-items: center;
     gap: 12px;
   }
+
   .dash-chart-label {
     width: 80px;
     font-size: 13px;
@@ -1333,6 +1924,7 @@
     color: var(--muted);
     flex-shrink: 0;
   }
+
   .dash-chart-track {
     flex: 1;
     background: var(--surface-muted);
@@ -1340,18 +1932,22 @@
     height: 16px;
     overflow: hidden;
   }
+
   .dash-chart-bar {
     height: 100%;
     border-radius: 6px;
     width: 0%;
     transition: width 0.85s cubic-bezier(0.4, 0, 0.2, 1);
   }
+
   .dash-bar-sales {
     background: linear-gradient(90deg, #2563eb, #60a5fa);
   }
+
   .dash-bar-purchases {
     background: linear-gradient(90deg, #d97706, #fbbf24);
   }
+
   .dash-chart-count {
     width: 36px;
     text-align: right;
@@ -1360,6 +1956,7 @@
     color: var(--text);
     flex-shrink: 0;
   }
+
   .dash-chart-totals {
     display: flex;
     gap: 12px;
@@ -1367,12 +1964,14 @@
     border-top: 1px solid var(--border);
     margin-top: 4px;
   }
+
   .dash-chart-total-item {
     flex: 1;
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
+
   .dash-chart-total-item span {
     font-size: 11px;
     color: var(--muted);
@@ -1380,11 +1979,13 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
+
   .dash-chart-total-item strong {
     font-size: 15px;
     font-weight: 700;
     color: var(--text);
   }
+
   /* Status badges */
   .dash-badge {
     display: inline-block;
@@ -1393,23 +1994,28 @@
     font-size: 11px;
     font-weight: 600;
   }
+
   .dash-badge-completed {
     background: #dcfce7;
     color: #15803d;
   }
+
   .dash-badge-pending {
     background: #fef9c3;
     color: #854d0e;
   }
+
   .dash-badge-cancelled {
     background: #fee2e2;
     color: #b91c1c;
   }
+
   /* Low stock coloring */
   .dash-stock-critical {
     color: #dc2626;
     font-weight: 700;
   }
+
   .dash-stock-warning {
     color: #d97706;
     font-weight: 600;
@@ -1433,18 +2039,22 @@
     cursor: pointer;
     user-select: none;
   }
+
   tr.inventory-row-expanded {
     background-color: var(--surface-hover, #f8fafc) !important;
     border-bottom: none !important;
   }
+
   tr.inventory-row-expanded .inventory-caret {
     transform: rotate(90deg);
     background: var(--primary, #2563eb);
     color: #ffffff;
   }
+
   .inventory-detail-row {
     background-color: var(--surface-hover, #f8fafc);
   }
+
   .inventory-detail-wrap {
     animation: slideDown 0.22s ease-out;
     background: #ffffff;
@@ -1454,11 +2064,13 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
     overflow: hidden;
   }
+
   @keyframes slideDown {
     from {
       opacity: 0;
       transform: translateY(-6px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);

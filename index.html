@@ -3,6 +3,7 @@
   <head>
     <base target="_top" />
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Inventory Management System</title>
     <!-- Modern Typography: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -28,8 +29,11 @@
     </style>
   </head>
   <body>
-    <div id="app" class="app-shell" data-sidebar-open="false">
-      <?!= include('sidebar'); ?>
+    <div id="app" class="app-shell" data-sidebar="expanded">
+      <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+      <aside class="sidebar" aria-label="Primary navigation">
+        <?!= include('sidebar'); ?>
+      </aside>
 
       <div class="app-main">
         <?!= include('navbar'); ?>
