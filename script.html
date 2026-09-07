@@ -540,6 +540,14 @@
         loadSales();
       }
 
+      if (nextPage === "inventory") {
+        if (!state.inventory.loaded) {
+          loadInventory();
+        } else {
+          renderInventory();
+        }
+      }
+
       if (nextPage === "reports") {
         loadReports(state.reports.currentType);
       }
@@ -2210,7 +2218,13 @@
 
     function loadItems(options = {}) {
       if (state.items.loaded && !options.force) {
+        renderItems();
         return;
+      }
+
+      // If in-memory records exist, render immediately to avoid waiting for server
+      if (state.items.records && state.items.records.length) {
+        renderItems();
       }
 
       showLoading(true);
@@ -2232,6 +2246,11 @@
       state.items.categories = payload.categories || [];
       state.items.units = payload.units || [];
       state.items.loaded = true;
+
+      // Keep state.sales.items synced
+      if (payload.items && payload.items.length) {
+        state.sales.items = payload.items;
+      }
 
       state.dashboardLoaded = false;
       state.reports.loaded = false;
@@ -2670,7 +2689,13 @@
 
     function loadPurchases(options = {}) {
       if (state.purchases.loaded && !options.force) {
+        renderPurchases();
         return;
+      }
+
+      // If in-memory records exist, render immediately to avoid waiting for server
+      if (state.purchases.records && state.purchases.records.length) {
+        renderPurchases();
       }
 
       showLoading(true);
@@ -2699,6 +2724,32 @@
       state.purchases.items = payload.items || [];
       state.purchases.suppliers = payload.suppliers || [];
       state.purchases.loaded = true;
+
+      // Sync payload.items to state.sales.items and state.items.records so all pages have latest stock
+      if (payload.items && payload.items.length) {
+        state.sales.items = payload.items;
+        state.items.records = payload.items;
+        if (state.inventory.summary && state.inventory.summary.length) {
+          payload.items.forEach((it) => {
+            const row = state.inventory.summary.find(
+              (r) => String(r.itemId || r.id).trim() === String(it.id).trim(),
+            );
+            if (row) {
+              row.currentStock = it.currentStock;
+              const min = Number(row.minimumStock) || 0;
+              row.status =
+                row.currentStock <= 0
+                  ? "Out of Stock"
+                  : row.currentStock <= min
+                    ? "Low"
+                    : "OK";
+            }
+          });
+          if (document.querySelector("#inventory-summary-tbody")) {
+            renderInventory();
+          }
+        }
+      }
 
       state.items.loaded = false;
       state.dashboardLoaded = false;
@@ -3255,7 +3306,13 @@
 
     function loadSales(options = {}) {
       if (state.sales.loaded && !options.force) {
+        renderSales();
         return;
+      }
+
+      // If in-memory records exist, render immediately to avoid waiting for server
+      if (state.sales.records && state.sales.records.length) {
+        renderSales();
       }
 
       showLoading(true);
@@ -3285,6 +3342,11 @@
       state.sales.customers = payload.customers || [];
       state.sales.itemSellingPrices = payload.itemSellingPrices || {};
       state.sales.loaded = true;
+
+      // Keep state.items.records synced with sales items stock
+      if (payload.items && payload.items.length) {
+        state.items.records = payload.items;
+      }
 
       // Auto-refresh: invalidate dependent pages so they fetch fresh data next navigation
       state.items.loaded = false;
@@ -3776,6 +3838,7 @@
       });
 
       const payload = {
+        invoiceNumber: document.querySelector(selectors.saleInvoiceNumber).value,
         items: items,
         customerName: form.elements.customerName
           ? form.elements.customerName.value
@@ -3796,6 +3859,14 @@
         return;
       }
 
+      const oldSale = saleId
+        ? state.sales.records.find((s) => s.id === saleId)
+        : null;
+      const oldItems =
+        oldSale && oldSale.items
+          ? JSON.parse(JSON.stringify(oldSale.items))
+          : [];
+
       showLoading(true);
       serverCall(
         saleId ? "updateSale" : "createSale",
@@ -3804,7 +3875,7 @@
           : [payload, state.sessionToken]),
       )
         .then((response) => {
-          applySaleDelta(response.data);
+          applySaleDelta(response.data, oldItems);
           closeSaleModal();
           toast(saleId ? "Sale updated." : "Sale created.", "success");
         })
@@ -3817,14 +3888,137 @@
         .finally(() => showLoading(false));
     }
 
-    function applySaleDelta(deltaData) {
-      if (!deltaData || deltaData.action === "create" && deltaData.sale) {
+    function refreshSaleTomSelectOptions_() {
+      const container = document.querySelector("#sale-items-container");
+      if (!container) return;
+      const selects = container.querySelectorAll(".sale-item-select");
+      selects.forEach((selectEl) => {
+        if (selectEl.tomselect) {
+          const items = state.sales.items.length
+            ? state.sales.items
+            : state.items.records;
+          items.forEach((item) => {
+            const price = getItemSellingPrice_(item.id);
+            const stock = item.currentStock != null ? item.currentStock : 0;
+            const stockLabel = stock <= 0 ? "Out of stock" : `Stock: ${stock}`;
+            const priceLabel =
+              price > 0
+                ? `PKR ${price.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : "No price set";
+            selectEl.tomselect.updateOption(item.id, {
+              value: item.id,
+              text: item.name,
+              label: `${item.name} | ${stockLabel} | ${priceLabel}`,
+              stock: stock,
+              price: price,
+              outOfStock: stock <= 0,
+            });
+          });
+        }
+      });
+    }
+
+    function adjustClientStock_(itemId, quantityChange) {
+      if (!itemId || !quantityChange) return;
+      const normalizedId = String(itemId).trim();
+      const change = Number(quantityChange) || 0;
+
+      // 1. Update state.sales.items (used by TomSelect)
+      if (Array.isArray(state.sales.items)) {
+        const saleItem = state.sales.items.find(
+          (i) => String(i.id).trim() === normalizedId,
+        );
+        if (saleItem) {
+          saleItem.currentStock = Math.max(
+            0,
+            (Number(saleItem.currentStock) || 0) + change,
+          );
+          if (saleItem.minimumStock !== undefined) {
+            saleItem.isLowStock =
+              saleItem.currentStock <= Number(saleItem.minimumStock);
+          }
+        }
+      }
+
+      // 2. Update state.items.records
+      if (Array.isArray(state.items.records)) {
+        const itemRecord = state.items.records.find(
+          (i) => String(i.id).trim() === normalizedId,
+        );
+        if (itemRecord) {
+          itemRecord.currentStock = Math.max(
+            0,
+            (Number(itemRecord.currentStock) || 0) + change,
+          );
+          if (itemRecord.minimumStock !== undefined) {
+            itemRecord.isLowStock =
+              itemRecord.currentStock <= Number(itemRecord.minimumStock);
+          }
+        }
+      }
+
+      // 3. Update state.purchases.items
+      if (Array.isArray(state.purchases.items)) {
+        const purchaseItem = state.purchases.items.find(
+          (i) => String(i.id).trim() === normalizedId,
+        );
+        if (purchaseItem) {
+          purchaseItem.currentStock = Math.max(
+            0,
+            (Number(purchaseItem.currentStock) || 0) + change,
+          );
+        }
+      }
+
+      // 4. Update state.inventory.summary
+      if (Array.isArray(state.inventory.summary)) {
+        const invSummary = state.inventory.summary.find(
+          (i) => String(i.itemId || i.id).trim() === normalizedId,
+        );
+        if (invSummary) {
+          invSummary.currentStock = Math.max(
+            0,
+            (Number(invSummary.currentStock) || 0) + change,
+          );
+          const min = Number(invSummary.minimumStock) || 0;
+          invSummary.status =
+            invSummary.currentStock <= 0
+              ? "Out of Stock"
+              : invSummary.currentStock <= min
+                ? "Low"
+                : "OK";
+        }
+      }
+
+      // 5. Invalidate batch cache for this item in inventory if present
+      if (
+        state.inventory.batchCache &&
+        state.inventory.batchCache[normalizedId]
+      ) {
+        delete state.inventory.batchCache[normalizedId];
+      }
+
+      // 6. Refresh any active TomSelect dropdown options
+      refreshSaleTomSelectOptions_();
+    }
+
+    function applySaleDelta(deltaData, oldItems = []) {
+      if (!deltaData) return;
+
+      if (deltaData.action === "create" && deltaData.sale) {
         // Add new sale to records (already sorted by frontend in loadSales)
         const newSale = deltaData.sale;
         if (newSale.id) {
           state.sales.records.unshift(newSale);
           state.sales.loaded = true;
           renderSales();
+        }
+
+        // Optimistically deduct sold stock for each line item
+        if (Array.isArray(newSale.items)) {
+          newSale.items.forEach((item) => {
+            adjustClientStock_(item.itemId, -Number(item.quantity));
+          });
         }
       } else if (deltaData.action === "update" && deltaData.sale) {
         // Update existing sale in place
@@ -3844,6 +4038,30 @@
           state.sales.loaded = true;
           renderSales();
         }
+
+        // Compute stock adjustment: old quantity - new quantity
+        const oldQtyMap = {};
+        (oldItems || []).forEach((it) => {
+          const k = String(it.itemId).trim();
+          oldQtyMap[k] = (oldQtyMap[k] || 0) + (Number(it.quantity) || 0);
+        });
+
+        const newQtyMap = {};
+        (updatedSale.items || []).forEach((it) => {
+          const k = String(it.itemId).trim();
+          newQtyMap[k] = (newQtyMap[k] || 0) + (Number(it.quantity) || 0);
+        });
+
+        const allItemIds = new Set([
+          ...Object.keys(oldQtyMap),
+          ...Object.keys(newQtyMap),
+        ]);
+        allItemIds.forEach((itemId) => {
+          const delta = (oldQtyMap[itemId] || 0) - (newQtyMap[itemId] || 0);
+          if (delta !== 0) {
+            adjustClientStock_(itemId, delta);
+          }
+        });
       } else if (deltaData.action === "delete" && deltaData.saleId) {
         // Remove sale from records
         const saleId = deltaData.saleId;
@@ -3853,9 +4071,27 @@
           state.sales.loaded = true;
           renderSales();
         }
+
+        // Restore stock for deleted items
+        if (Array.isArray(deltaData.items)) {
+          deltaData.items.forEach((item) => {
+            adjustClientStock_(item.itemId, Number(item.quantity));
+          });
+        }
       }
 
-      // Invalidate dependent pages so they fetch fresh data on next navigation
+      // Re-render inventory and items in DOM if present/loaded
+      if (document.querySelector("#inventory-summary-tbody")) {
+        renderInventory();
+      }
+      if (
+        document.querySelector(selectors.itemsTableBody) &&
+        state.items.loaded
+      ) {
+        renderItems();
+      }
+
+      // Invalidate dependent pages so background sync can occur when needed
       state.items.loaded = false;
       state.dashboardLoaded = false;
       state.reports.loaded = false;
@@ -3868,6 +4104,18 @@
       if (!payload.items || !payload.items.length) {
         message = "At least one item is required.";
       } else {
+        const itemsList = state.sales.items.length
+          ? state.sales.items
+          : state.items.records;
+
+        const saleIdInput = document.querySelector(selectors.saleIdInput);
+        const currentSaleId = saleIdInput ? saleIdInput.value : "";
+        const existingSale =
+          currentSaleId && state.sales.records
+            ? state.sales.records.find((s) => s.id === currentSaleId)
+            : null;
+
+        const requestedQuantities = {};
         for (let i = 0; i < payload.items.length; i++) {
           const item = payload.items[i];
           if (!item.itemId) {
@@ -3881,6 +4129,35 @@
           if (item.unitPrice < 0) {
             message = `Item #${i + 1}: Unit price cannot be negative.`;
             break;
+          }
+          const idKey = String(item.itemId).trim();
+          requestedQuantities[idKey] =
+            (requestedQuantities[idKey] || 0) + Number(item.quantity);
+        }
+
+        if (!message) {
+          for (const [idKey, requestedQty] of Object.entries(
+            requestedQuantities,
+          )) {
+            const matchedItem = itemsList.find(
+              (it) => String(it.id).trim() === idKey,
+            );
+            if (matchedItem) {
+              let availableStock = Number(matchedItem.currentStock) || 0;
+              // If editing an existing sale, add back previously allocated quantity for this item
+              if (existingSale && existingSale.items) {
+                const prevAllocated = existingSale.items
+                  .filter((it) => String(it.itemId).trim() === idKey)
+                  .reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+                availableStock += prevAllocated;
+              }
+
+              if (requestedQty > availableStock) {
+                const itemName = matchedItem.name || idKey;
+                message = `"${itemName}": Only ${availableStock} available in stock (requested ${requestedQty}).`;
+                break;
+              }
+            }
           }
         }
       }
@@ -3944,10 +4221,20 @@
           return;
         }
 
+        const existingSale = state.sales.records.find((s) => s.id === saleId);
+        const fallbackItems =
+          existingSale && existingSale.items
+            ? JSON.parse(JSON.stringify(existingSale.items))
+            : [];
+
         showLoading(true);
         serverCall("deleteSale", saleId, state.sessionToken)
           .then((response) => {
-            applySaleDelta(response.data);
+            const data = response.data || {};
+            if ((!data.items || !data.items.length) && fallbackItems.length) {
+              data.items = fallbackItems;
+            }
+            applySaleDelta(data);
             toast("Sale deleted.", "success");
           })
           .catch((error) => {
@@ -4413,6 +4700,11 @@
       if (state.inventory.loaded && !options.force) {
         renderInventory();
         return;
+      }
+
+      // If in-memory summary exists, render immediately for 0ms lag
+      if (state.inventory.summary && state.inventory.summary.length) {
+        renderInventory();
       }
 
       showLoading(true);

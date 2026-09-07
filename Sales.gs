@@ -323,6 +323,8 @@ function deleteSale(id, token) {
       throw new Error("Sale was not found.");
     }
 
+    var deletedItems = findSaleItemsBySaleId_(saleId);
+
     // Restore exactly what was allocated for this sale
     restoreSaleAllocations_(saleId);
 
@@ -345,6 +347,12 @@ function deleteSale(id, token) {
     return successResponse_({
       action: "delete",
       saleId: saleId,
+      items: (deletedItems || []).map(function (it) {
+        return {
+          itemId: it.itemId,
+          quantity: it.quantity,
+        };
+      }),
     });
   } catch (error) {
     return errorResponse_(error.message);
@@ -557,6 +565,10 @@ function findSaleById_(id) {
   var saleId = normalizeText_(id);
   var map = buildSaleLookupMap_();
   return map[saleId] || null;
+}
+
+function findSaleItemsBySaleId_(saleId) {
+  return getSaleItemsRecords_(saleId);
 }
 
 function createSaleId_() {
