@@ -325,8 +325,9 @@ function deleteSale(id, token) {
 
     var deletedItems = findSaleItemsBySaleId_(saleId);
 
-    // Restore exactly what was allocated for this sale
+    // Restore exactly what was allocated for this sale, then remove any stale allocation rows
     restoreSaleAllocations_(saleId);
+    deleteAllocationsBySaleId_(saleId);
 
     // Delete sale items
     deleteSaleItemsBySaleId_(saleId);
@@ -834,7 +835,13 @@ function generateInvoiceHtml_(invoice) {
     if (item.batches && item.batches.length) {
       batchText = item.batches
         .map(function (b) {
-          return "Batch: " + escapeHtml_(b.batchNumber) + " (Exp: " + escapeHtml_(b.expiryDate) + ")";
+          return (
+            "Batch: " +
+            escapeHtml_(b.batchNumber) +
+            " (Exp: " +
+            escapeHtml_(b.expiryDate) +
+            ")"
+          );
         })
         .join(", ");
     }
@@ -842,8 +849,14 @@ function generateInvoiceHtml_(invoice) {
     itemsHtml +=
       "<tr>" +
       "<td>" +
-      "<div><strong>" + escapeHtml_(item.name || "Unknown") + "</strong></div>" +
-      (batchText ? "<div style='font-size:11px;color:#6b7280;margin-top:2px;'>" + batchText + "</div>" : "") +
+      "<div><strong>" +
+      escapeHtml_(item.name || "Unknown") +
+      "</strong></div>" +
+      (batchText
+        ? "<div style='font-size:11px;color:#6b7280;margin-top:2px;'>" +
+          batchText +
+          "</div>"
+        : "") +
       "</td>" +
       "<td style='text-align:center'>" +
       item.quantity +
@@ -941,9 +954,7 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
     // Pre-grouped purchases passed in — avoid full table scan
     purchases = itemPurchases.filter(function (p) {
       var isExpired = p.expiryDate && p.expiryDate < todayStr;
-      return (
-        toNumber_(p.remainingQuantity) > 0 && !isExpired
-      );
+      return toNumber_(p.remainingQuantity) > 0 && !isExpired;
     });
   } else {
     // Fallback: full scan
@@ -1076,13 +1087,13 @@ function restoreSaleAllocations_(saleId) {
 
   var deleteRowSet = {};
   allocations.forEach(function (a) {
-    deleteRowSet[a._rowNumber] = true;
+    deleteRowSet[Number(a._rowNumber)] = true;
   });
 
   var keepRows = [allRows[0]]; // header
   for (var k = 1; k < allRows.length; k++) {
-    var sheetRowNum = k + 2;
-    if (!deleteRowSet[sheetRowNum]) {
+    var actualRowNumber = k + 1; // sheet row 2 corresponds to index 1 in allRows
+    if (!deleteRowSet[actualRowNumber]) {
       keepRows.push(allRows[k]);
     }
   }
@@ -1095,6 +1106,7 @@ function restoreSaleAllocations_(saleId) {
   }
 
   // Invalidate stock and related lookup caches
+  invalidateDataCache_();
   invalidateStockMapCache_();
   invalidatePurchasesByItemMapCache_();
   invalidateSaleLookupMapCache_();

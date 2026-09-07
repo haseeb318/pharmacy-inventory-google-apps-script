@@ -337,7 +337,8 @@
         if (window.innerWidth > 900) {
           const saved = localStorage.getItem("app_sidebar_state");
           // Default to expanded; restore collapsed if saved
-          app.dataset.sidebar = (saved === "collapsed") ? "collapsed" : "expanded";
+          app.dataset.sidebar =
+            saved === "collapsed" ? "collapsed" : "expanded";
         } else {
           // Mobile: start with drawer closed
           app.dataset.sidebar = "closed";
@@ -408,11 +409,15 @@
           if (!app) return;
           if (window.innerWidth > 900) {
             // Going to desktop: restore saved desktop state
-            if (app.dataset.sidebar === "open" || app.dataset.sidebar === "closed") {
+            if (
+              app.dataset.sidebar === "open" ||
+              app.dataset.sidebar === "closed"
+            ) {
               try {
                 const saved = localStorage.getItem("app_sidebar_state");
-                app.dataset.sidebar = (saved === "collapsed") ? "collapsed" : "expanded";
-              } catch(e) {
+                app.dataset.sidebar =
+                  saved === "collapsed" ? "collapsed" : "expanded";
+              } catch (e) {
                 app.dataset.sidebar = "expanded";
               }
             }
@@ -1477,7 +1482,12 @@
     }
 
     function formatDate(value) {
-      if (!value || value === "-" || value === "Not updated" || value === "No date") {
+      if (
+        !value ||
+        value === "-" ||
+        value === "Not updated" ||
+        value === "No date"
+      ) {
         return "-";
       }
       const date = parseDateSafe_(value);
@@ -2127,9 +2137,15 @@
       }
 
       // Sync aria-expanded on all toggle buttons
-      const isExpanded = app.dataset.sidebar === "expanded" || app.dataset.sidebar === "open";
-      document.querySelectorAll(selectors.sidebarToggle + ', [data-action="toggle-sidebar"]')
-        .forEach(btn => btn.setAttribute("aria-expanded", String(isExpanded)));
+      const isExpanded =
+        app.dataset.sidebar === "expanded" || app.dataset.sidebar === "open";
+      document
+        .querySelectorAll(
+          selectors.sidebarToggle + ', [data-action="toggle-sidebar"]',
+        )
+        .forEach((btn) =>
+          btn.setAttribute("aria-expanded", String(isExpanded)),
+        );
     }
 
     function closeSidebar() {
@@ -2139,8 +2155,11 @@
         app.dataset.sidebar = "closed";
       }
       // Sync aria-expanded
-      document.querySelectorAll(selectors.sidebarToggle + ', [data-action="toggle-sidebar"]')
-        .forEach(btn => btn.setAttribute("aria-expanded", "false"));
+      document
+        .querySelectorAll(
+          selectors.sidebarToggle + ', [data-action="toggle-sidebar"]',
+        )
+        .forEach((btn) => btn.setAttribute("aria-expanded", "false"));
     }
 
     function bindItemsModule() {
@@ -2838,7 +2857,9 @@
       setText(selectors.purchasesPaginationSummary, purchasePaginationText);
       setText(
         selectors.purchasesSummary,
-        filteredPurchases.length === 0 ? "No purchases yet" : purchasePaginationText,
+        filteredPurchases.length === 0
+          ? "No purchases yet"
+          : purchasePaginationText,
       );
 
       const paginationDiv = document.querySelector(
@@ -3649,9 +3670,10 @@
             const stockBadge = data.outOfStock
               ? `<span style="background:#fee2e2;color:#dc2626;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;">Out of stock</span>`
               : `<span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;">Stock: ${data.stock}</span>`;
-            const priceStr = data.price > 0
-              ? `<span style="font-weight:600;color:#0f172a;">PKR ${Number(data.price).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
-              : `<span style="color:#9ca3af;font-size:11px;">No price set</span>`;
+            const priceStr =
+              data.price > 0
+                ? `<span style="font-weight:600;color:#0f172a;">PKR ${Number(data.price).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
+                : `<span style="color:#9ca3af;font-size:11px;">No price set</span>`;
             return (
               `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;gap:8px;">` +
               `<span style="flex:1;font-size:13px;">${escape(data.text)}</span>` +
@@ -3711,7 +3733,8 @@
 
       const row = document.createElement("div");
       row.className = "sale-item-row";
-      row.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:8px;";
+      row.style.cssText =
+        "display:flex;gap:8px;align-items:center;margin-bottom:8px;";
 
       // Item select — plain element, TomSelect will take over rendering.
       // No options pre-populated here; TomSelect gets them from state.
@@ -3807,6 +3830,27 @@
       }
     }
 
+    function refreshSaleItemDataAfterMutation_() {
+      return Promise.all([
+        serverCall("getItems", state.sessionToken),
+        serverCall("getSales", state.sessionToken),
+      ])
+        .then(([itemsResponse, salesResponse]) => {
+          if (itemsResponse && itemsResponse.data) {
+            applyItemsData(itemsResponse.data);
+          }
+          if (salesResponse && salesResponse.data) {
+            applySalesData(salesResponse.data);
+          }
+        })
+        .catch((error) => {
+          console.warn(
+            "Unable to refresh item/sale stock after sale mutation.",
+            error,
+          );
+        });
+    }
+
     function handleSaleFormSubmit(event) {
       event.preventDefault();
 
@@ -3838,7 +3882,8 @@
       });
 
       const payload = {
-        invoiceNumber: document.querySelector(selectors.saleInvoiceNumber).value,
+        invoiceNumber: document.querySelector(selectors.saleInvoiceNumber)
+          .value,
         items: items,
         customerName: form.elements.customerName
           ? form.elements.customerName.value
@@ -3876,6 +3921,9 @@
       )
         .then((response) => {
           applySaleDelta(response.data, oldItems);
+          return refreshSaleItemDataAfterMutation_();
+        })
+        .then(() => {
           closeSaleModal();
           toast(saleId ? "Sale updated." : "Sale created.", "success");
         })
@@ -3923,7 +3971,7 @@
       const normalizedId = String(itemId).trim();
       const change = Number(quantityChange) || 0;
 
-      // 1. Update state.sales.items (used by TomSelect)
+      // 1. Update state.sales.items (used by TomSelect dropdown in sale modal)
       if (Array.isArray(state.sales.items)) {
         const saleItem = state.sales.items.find(
           (i) => String(i.id).trim() === normalizedId,
@@ -3989,7 +4037,6 @@
                 : "OK";
         }
       }
-
       // 5. Invalidate batch cache for this item in inventory if present
       if (
         state.inventory.batchCache &&
@@ -4235,6 +4282,9 @@
               data.items = fallbackItems;
             }
             applySaleDelta(data);
+            return refreshSaleItemDataAfterMutation_();
+          })
+          .then(() => {
             toast("Sale deleted.", "success");
           })
           .catch((error) => {
@@ -4849,14 +4899,16 @@
 
           const isExpired =
             row.nearestExpiryStatus === "Expired" ||
-            (typeof row.nearestExpiryDays === "number" && row.nearestExpiryDays < 0);
+            (typeof row.nearestExpiryDays === "number" &&
+              row.nearestExpiryDays < 0);
           const isOutOfStock = row.currentStock <= 0;
           const isLowStock = row.currentStock <= row.minimumStock;
           const isExpiring =
             row.nearestExpiryStatus === "Expiring" ||
             (typeof row.nearestExpiryDays === "number" &&
               row.nearestExpiryDays >= 0 &&
-              row.nearestExpiryDays <= (state.inventory.expiryWarningDays || 30));
+              row.nearestExpiryDays <=
+                (state.inventory.expiryWarningDays || 30));
 
           let statusText = "OK";
           let statusClass = "status-active";
