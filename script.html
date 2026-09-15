@@ -1462,8 +1462,8 @@
         return null;
       }
 
-      // Handle YYYY-MM-DD format in local timezone to avoid UTC day shift
-      const dateOnly = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      // Treat date-prefixed values as calendar dates to avoid UTC day shift.
+      const dateOnly = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/);
       if (dateOnly) {
         return new Date(
           Number(dateOnly[1]),
