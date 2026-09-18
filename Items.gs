@@ -195,7 +195,7 @@ function getItemCategories_() {
 
 function getItemUnits_() {
   return [
-    "Piece",
+   "Piece",
     "Box",
     "Pack",
     "Carton",
@@ -206,6 +206,8 @@ function getItemUnits_() {
     "Liter",
     "Meter",
     "Unit",
+    "Strip",
+    "Ampoule",
     "Other"
   ];
 }
