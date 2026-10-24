@@ -73,6 +73,14 @@ function deleteAllocationsBySaleId_(saleId) {
 
   if (keepRows.length === allRows.length) return;
 
-  dataRange.clearContent();
-  sheet.getRange(1, 1, keepRows.length, keepRows[0].length).setValues(keepRows);
+  // Fix #7: Clear ONLY data rows (row 2 onwards), keeping Row 1 headers, formatting & validations intact
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
+  }
+  if (keepRows.length > 1) {
+    var dataToSet = keepRows.slice(1);
+    sheet.getRange(2, 1, dataToSet.length, dataToSet[0].length).setValues(dataToSet);
+  }
 }

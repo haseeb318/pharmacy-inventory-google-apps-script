@@ -70,15 +70,23 @@ function createSale(payload, token) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
+  // Fix #1: Declare outside try so the catch block can reference them for rollback
+  var saleId = null;
+  var saleSheet = null;
+  var saleHeaderWritten = false;
+
   try {
     assertAuthenticatedRole_(token, ["Admin", "Staff"]);
+    // Fix #4: Force live read — bypass 15-second stale cache before validation
+    invalidateDataCache_();
+    invalidatePurchasesByItemMapCache_();
     // PERFORMANCE: Single group-by pass over purchases to avoid per-item full table scans
     var purchasesByItem = buildPurchasesByItemMap_();
     var sale = validateSalePayload_(payload, "", purchasesByItem);
-    var saleSheet = getSalesSheet_();
+    saleSheet = getSalesSheet_();
     var itemsSheet = getSaleItemsSheet_();
     var now = formatDateTime_(new Date());
-    var saleId = createSaleId_();
+    saleId = createSaleId_();
     var invoiceNumber = normalizeText_(
       sale.invoiceNumber ||
         "INV-" + Utilities.getUuid().split("-")[0].toUpperCase(),
@@ -90,6 +98,7 @@ function createSale(payload, token) {
     for (var i = 0; i < items.length; i++) {
       totalAmount += toNumber_(items[i].totalPrice);
     }
+    totalAmount = Math.round(totalAmount * 100) / 100;
 
     saleSheet.appendRow([
       saleId,
@@ -105,6 +114,7 @@ function createSale(payload, token) {
       now,
       now,
     ]);
+    saleHeaderWritten = true; // Fix #1: flag so rollback knows the header row exists
 
     // Write sale items and allocate batches per item
     for (var j = 0; j < items.length; j++) {
@@ -124,12 +134,15 @@ function createSale(payload, token) {
       ]);
 
       // Allocate FIFO batches using pre-grouped purchases
-      allocateSaleBatches_(
+      // Fix #2: capture return so we can update the in-memory snapshot
+      var allocated = allocateSaleBatches_(
         saleId,
         item.itemId,
         toNumber_(item.quantity),
         purchasesByItem[normalizedItemId] || [],
       );
+      // Fix #2: mutate snapshot so the next item sees the correct remainingQuantity
+      updatePurchasesByItemSnapshot_(purchasesByItem, allocated);
     }
 
     // PERFORMANCE: Invalidate caches after mutation
@@ -168,6 +181,10 @@ function createSale(payload, token) {
       },
     });
   } catch (error) {
+    // Fix #1: Best-effort compensating rollback — undo any partial writes
+    rollbackCreateSale_(saleId, saleSheet, saleHeaderWritten);
+    invalidateDataCache_();
+    invalidatePurchasesByItemMapCache_();
     return errorResponse_(error.message);
   } finally {
     lock.releaseLock();
@@ -182,10 +199,16 @@ function updateSale(id, payload, token) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
+  // Fix #1: Declare outside try so the catch block can reference it for rollback
+  var saleId = null;
+
   try {
     assertAuthenticatedRole_(token, ["Admin", "Staff"]);
-    var saleId = normalizeText_(id);
+    saleId = normalizeText_(id);
     var existing = findSaleById_(saleId);
+    // Fix #4: Force live read — bypass 15-second stale cache before validation
+    invalidateDataCache_();
+    invalidatePurchasesByItemMapCache_();
     // PERFORMANCE: Single group-by pass over purchases
     var purchasesByItem = buildPurchasesByItemMap_();
     var sale = validateSalePayload_(payload, saleId, purchasesByItem);
@@ -211,6 +234,7 @@ function updateSale(id, payload, token) {
     for (var i = 0; i < items.length; i++) {
       totalAmount += toNumber_(items[i].totalPrice);
     }
+    totalAmount = Math.round(totalAmount * 100) / 100;
 
     var saleSheet = getSalesSheet_();
     var headers = getSalesHeaders_();
@@ -257,12 +281,15 @@ function updateSale(id, payload, token) {
       ]);
 
       // Allocate FIFO batches using pre-grouped purchases
-      allocateSaleBatches_(
+      // Fix #2: capture return so we can update the in-memory snapshot
+      var allocated = allocateSaleBatches_(
         saleId,
         item.itemId,
         toNumber_(item.quantity),
         purchasesByItem[normalizedItemId] || [],
       );
+      // Fix #2: mutate snapshot so the next item sees the correct remainingQuantity
+      updatePurchasesByItemSnapshot_(purchasesByItem, allocated);
     }
 
     // PERFORMANCE: Invalidate caches after mutation
@@ -301,6 +328,10 @@ function updateSale(id, payload, token) {
       },
     });
   } catch (error) {
+    // Fix #1: Best-effort compensating rollback for partial new allocations
+    rollbackUpdateSale_(saleId, getSalesSheet_());
+    invalidateDataCache_();
+    invalidatePurchasesByItemMapCache_();
     return errorResponse_(error.message);
   } finally {
     lock.releaseLock();
@@ -325,9 +356,9 @@ function deleteSale(id, token) {
 
     var deletedItems = findSaleItemsBySaleId_(saleId);
 
-    // Restore exactly what was allocated for this sale, then remove any stale allocation rows
+    // Restore exactly what was allocated for this sale
+    // (restoreSaleAllocations_ already cleans the SalesAllocations rows — no need for a second pass)
     restoreSaleAllocations_(saleId);
-    deleteAllocationsBySaleId_(saleId);
 
     // Delete sale items
     deleteSaleItemsBySaleId_(saleId);
@@ -443,9 +474,16 @@ function deleteSaleItemsBySaleId_(saleId) {
 
   if (keepRows.length === allRows.length) return; // nothing to delete
 
-  // Single batch: clear all content, then write filtered rows
-  dataRange.clearContent();
-  sheet.getRange(1, 1, keepRows.length, keepRows[0].length).setValues(keepRows);
+  // Fix #7: Clear ONLY data rows (row 2 onwards), keeping Row 1 headers, formatting & validations intact
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
+  }
+  if (keepRows.length > 1) {
+    var dataToSet = keepRows.slice(1);
+    sheet.getRange(2, 1, dataToSet.length, dataToSet[0].length).setValues(dataToSet);
+  }
 }
 
 function createSaleItemId_() {
@@ -636,7 +674,7 @@ function validateSalePayload_(payload, existingId, purchasesByItem) {
       throw new Error("Unit price cannot be negative.");
     }
 
-    var totalPrice = quantity * unitPrice;
+    var totalPrice = Math.round(quantity * unitPrice * 100) / 100;
     if (totalPrice < 0) {
       throw new Error("Total price cannot be negative.");
     }
@@ -716,23 +754,37 @@ function validateSalePayload_(payload, existingId, purchasesByItem) {
 }
 
 function getSalesCustomers_() {
-  var sales = getSalesRecords_();
+  var masterCustomers = getCustomerRecords_();
   var seen = {};
   var customers = [];
 
-  sales.forEach(function (sale) {
-    var name = sale.customerName;
-    if (name && !seen[name]) {
-      seen[name] = true;
+  masterCustomers.forEach(function (c) {
+    var name = normalizeText_(c.name);
+    if (name && !seen[name.toLowerCase()]) {
+      seen[name.toLowerCase()] = true;
       customers.push(name);
     }
   });
 
-  return customers.concat([
-    "Walk-in Customer",
-    "Retail Customer",
-    "Wholesale Customer",
-  ]);
+  if (customers.length === 0) {
+    var sales = getSalesRecords_();
+    sales.forEach(function (sale) {
+      var name = normalizeText_(sale.customerName);
+      if (name && !seen[name.toLowerCase()]) {
+        seen[name.toLowerCase()] = true;
+        customers.push(name);
+      }
+    });
+
+    ["Walk-in Customer", "Retail Customer", "Wholesale Customer"].forEach(function (defName) {
+      if (!seen[defName.toLowerCase()]) {
+        seen[defName.toLowerCase()] = true;
+        customers.push(defName);
+      }
+    });
+  }
+
+  return customers;
 }
 
 /* ================================================================
@@ -983,7 +1035,7 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
   var colMap = getPurchasesColumnIndexMap_(purchaseSheet, purchaseHeaders);
   var remainingCol = colMap["RemainingQuantity"] || 14;
 
-  var allocations = [];
+  var pendingAllocations = [];
   var remainingUpdates = [];
 
   for (var i = 0; i < purchases.length; i++) {
@@ -996,29 +1048,14 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
     var consumed = Math.min(available, qty);
     if (consumed <= 0) continue;
 
-    // Collect update for exact batch row
+    // Collect stock update for this batch row
     remainingUpdates.push({
       rowNumber: batch._rowNumber,
       newValue: available - consumed,
     });
 
-    // Record allocation
-    var allocId = "ALC-" + Utilities.getUuid().split("-")[0].toUpperCase();
-    allocSheet.appendRow([
-      allocId,
-      saleId,
-      itemId,
-      batch.id,
-      batch._rowNumber,
-      consumed,
-      now,
-      now,
-    ]);
-
-    allocations.push({
-      id: allocId,
-      saleId: saleId,
-      itemId: itemId,
+    // Collect allocation record — no sheet write yet
+    pendingAllocations.push({
       purchaseId: batch.id,
       batchRowNumber: batch._rowNumber,
       consumedQuantity: consumed,
@@ -1027,18 +1064,55 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
     qty -= consumed;
   }
 
-  // Exact row write: ensures non-contiguous purchase batches are never corrupted
+  // Check sufficiency before touching any sheet (fail fast, zero side-effects)
+  if (qty > 0) {
+    throw new Error("Insufficient stock for this sale.");
+  }
+
+  // STEP 1 (Fix #3): Decrement purchase stock FIRST.
+  // If the script dies after this point but before alloc records are written,
+  // restoreSaleAllocations_ finds no rows and won't double-restore.
+  // A slight undercount is safer than phantom excess stock.
   for (var u = 0; u < remainingUpdates.length; u++) {
     purchaseSheet
       .getRange(remainingUpdates[u].rowNumber, remainingCol, 1, 1)
       .setValue(remainingUpdates[u].newValue);
   }
 
-  if (qty > 0) {
-    throw new Error("Insufficient stock for this sale.");
+  // STEP 2 (Fix #7): Batch-write all allocation records in ONE setValues call.
+  var allocRows = [];
+  var fullAllocations = [];
+  for (var a = 0; a < pendingAllocations.length; a++) {
+    var al = pendingAllocations[a];
+    var allocId = "ALC-" + Utilities.getUuid().split("-")[0].toUpperCase();
+    allocRows.push([
+      allocId,
+      saleId,
+      itemId,
+      al.purchaseId,
+      al.batchRowNumber,
+      al.consumedQuantity,
+      now,
+      now,
+    ]);
+    fullAllocations.push({
+      id: allocId,
+      saleId: saleId,
+      itemId: itemId,
+      purchaseId: al.purchaseId,
+      batchRowNumber: al.batchRowNumber,
+      consumedQuantity: al.consumedQuantity,
+    });
   }
 
-  return allocations;
+  if (allocRows.length > 0) {
+    var allocStartRow = allocSheet.getLastRow() + 1;
+    allocSheet
+      .getRange(allocStartRow, 1, allocRows.length, allocRows[0].length)
+      .setValues(allocRows);
+  }
+
+  return fullAllocations;
 }
 
 function restoreSaleAllocations_(saleId) {
@@ -1055,55 +1129,76 @@ function restoreSaleAllocations_(saleId) {
   var purchaseSheet = getPurchasesSheet_();
   var purchaseHeaders = getPurchasesHeaders_();
   var colMap = getPurchasesColumnIndexMap_(purchaseSheet, purchaseHeaders);
+  var idCol = colMap["ID"] || 1;
   var remainingCol = colMap["RemainingQuantity"] || 14;
 
-  // Group consumed quantities by exact batch row number to sum them
-  var restoreByRow = {};
-  allocations.forEach(function (a) {
-    var rowNum = a.batchRowNumber;
-    if (!restoreByRow[rowNum]) {
-      restoreByRow[rowNum] = 0;
+  var lastPurchaseRow = purchaseSheet.getLastRow();
+  var idToRowMap = {};
+
+  // PERFORMANCE: Read ONLY the ID column in one single call.
+  // Even with 50,000 rows, reading a 1-column range takes only ~15-30ms.
+  if (lastPurchaseRow >= 2) {
+    var idValues = purchaseSheet
+      .getRange(2, idCol, lastPurchaseRow - 1, 1)
+      .getValues();
+    for (var r = 0; r < idValues.length; r++) {
+      var pid = normalizeText_(idValues[r][0]);
+      if (pid) {
+        idToRowMap[pid] = r + 2; // actual current 1-based sheet row
+      }
     }
-    restoreByRow[rowNum] += toNumber_(a.consumedQuantity);
+  }
+
+  // Group consumed quantities by PurchaseID (with rowNumber fallback for legacy records)
+  var restoreByPurchase = {};
+  allocations.forEach(function (a) {
+    var pid = normalizeText_(a.purchaseId);
+    var targetKey = pid ? "ID:" + pid : "ROW:" + a.batchRowNumber;
+    if (!restoreByPurchase[targetKey]) {
+      restoreByPurchase[targetKey] = {
+        purchaseId: pid,
+        fallbackRow: toNumber_(a.batchRowNumber),
+        qty: 0,
+      };
+    }
+    restoreByPurchase[targetKey].qty += toNumber_(a.consumedQuantity);
   });
 
   // Restore each affected batch row directly
-  for (var rowNumStr in restoreByRow) {
-    if (restoreByRow.hasOwnProperty(rowNumStr)) {
-      var rowNumber = parseInt(rowNumStr, 10);
-      var currentVal = toNumber_(
-        purchaseSheet.getRange(rowNumber, remainingCol, 1, 1).getValue(),
-      );
-      purchaseSheet
-        .getRange(rowNumber, remainingCol, 1, 1)
-        .setValue(currentVal + restoreByRow[rowNumStr]);
+  for (var key in restoreByPurchase) {
+    if (restoreByPurchase.hasOwnProperty(key)) {
+      var item = restoreByPurchase[key];
+      var targetRow = null;
+
+      // 1. Primary: Locate current live row using PurchaseID
+      if (item.purchaseId && idToRowMap[item.purchaseId]) {
+        targetRow = idToRowMap[item.purchaseId];
+      }
+      // 2. Fallback: Use batchRowNumber only if PurchaseID not found / legacy row
+      else if (item.fallbackRow && item.fallbackRow >= 2 && item.fallbackRow <= lastPurchaseRow) {
+        targetRow = item.fallbackRow;
+      }
+
+      if (targetRow) {
+        var currentVal = toNumber_(
+          purchaseSheet.getRange(targetRow, remainingCol, 1, 1).getValue(),
+        );
+        purchaseSheet
+          .getRange(targetRow, remainingCol, 1, 1)
+          .setValue(currentVal + item.qty);
+      } else {
+        Logger.log(
+          "Warning: Could not locate purchase batch for restoration. ID: " +
+            item.purchaseId +
+            ", Fallback row: " +
+            item.fallbackRow,
+        );
+      }
     }
   }
 
-  // Batch-delete allocation records from SalesAllocations sheet
-  var allocSheet = getSalesAllocationsSheet_();
-  var allocDataRange = allocSheet.getDataRange();
-  var allRows = allocDataRange.getValues();
-
-  var deleteRowSet = {};
-  allocations.forEach(function (a) {
-    deleteRowSet[Number(a._rowNumber)] = true;
-  });
-
-  var keepRows = [allRows[0]]; // header
-  for (var k = 1; k < allRows.length; k++) {
-    var actualRowNumber = k + 1; // sheet row 2 corresponds to index 1 in allRows
-    if (!deleteRowSet[actualRowNumber]) {
-      keepRows.push(allRows[k]);
-    }
-  }
-
-  if (keepRows.length < allRows.length) {
-    allocDataRange.clearContent();
-    allocSheet
-      .getRange(1, 1, keepRows.length, keepRows[0].length)
-      .setValues(keepRows);
-  }
+  // Delete allocation records by SaleID (immune to row-index shifting)
+  deleteAllocationsBySaleId_(saleId);
 
   // Invalidate stock and related lookup caches
   invalidateDataCache_();
@@ -1111,4 +1206,175 @@ function restoreSaleAllocations_(saleId) {
   invalidatePurchasesByItemMapCache_();
   invalidateSaleLookupMapCache_();
   invalidateItemLookupMapCache_();
+}
+
+/* ================================================================
+   ACID Fix Helpers
+   ================================================================ */
+
+/**
+ * Fix #2: After allocating batches for one sale item, update the in-memory
+ * purchasesByItem snapshot so the NEXT item in the same sale sees the
+ * correct remainingQuantity — preventing same-batch double-deduction.
+ *
+ * @param {Object} purchasesByItem  The live in-memory map (mutated in place).
+ * @param {Array}  allocations      Return value from allocateSaleBatches_.
+ */
+function updatePurchasesByItemSnapshot_(purchasesByItem, allocations) {
+  if (!purchasesByItem || !allocations || !allocations.length) return;
+  allocations.forEach(function (al) {
+    var itemBatches = purchasesByItem[normalizeText_(al.itemId)] || [];
+    itemBatches.forEach(function (batch) {
+      if (normalizeText_(batch.id) === normalizeText_(al.purchaseId)) {
+        batch.remainingQuantity = Math.max(
+          0,
+          toNumber_(batch.remainingQuantity) - toNumber_(al.consumedQuantity),
+        );
+      }
+    });
+  });
+}
+
+/**
+ * Fix #1: Best-effort compensating rollback for createSale.
+ * Attempts to undo all partial writes in reverse order.
+ * If rollback itself fails, stamps the sale row as _BROKEN_ so an admin
+ * can find and manually correct it.
+ *
+ * @param {string|null}  saleId            The sale ID (may be null if failure was pre-ID).
+ * @param {Sheet|null}   saleSheet         The Sales sheet reference.
+ * @param {boolean}      saleHeaderWritten Whether the header row was committed.
+ */
+function rollbackCreateSale_(saleId, saleSheet, saleHeaderWritten) {
+  if (!saleId) return; // failed before ID was assigned — nothing to roll back
+  try {
+    // Restore any stock already decremented, remove alloc + item rows
+    restoreSaleAllocations_(saleId);
+    deleteAllocationsBySaleId_(saleId);
+    deleteSaleItemsBySaleId_(saleId);
+    if (saleHeaderWritten && saleSheet) {
+      invalidateSaleLookupMapCache_();
+      var sale = findSaleById_(saleId);
+      if (sale) {
+        saleSheet.deleteRow(sale._rowNumber);
+      }
+    }
+  } catch (rollbackErr) {
+    // Rollback itself failed — mark row as _BROKEN_ for manual review
+    try {
+      invalidateSaleLookupMapCache_();
+      var broken = findSaleById_(saleId);
+      if (broken && saleSheet) {
+        // Status is the 7th column in getSalesHeaders_()
+        saleSheet.getRange(broken._rowNumber, 7, 1, 1).setValue("_BROKEN_");
+      }
+    } catch (e) { /* silent — best effort */ }
+  }
+}
+
+/**
+ * Fix #1: Best-effort compensating rollback for updateSale.
+ * Because the old items are deleted before the new write loop begins,
+ * a perfect undo is not possible. This function:
+ *   1. Restores any NEW allocations already committed (stock returned).
+ *   2. Stamps the sale as _BROKEN_ so an admin can review it.
+ *
+ * @param {string|null}  saleId     The sale ID.
+ * @param {Sheet|null}   saleSheet  The Sales sheet reference.
+ */
+function rollbackUpdateSale_(saleId, saleSheet) {
+  if (!saleId) return;
+  try {
+    restoreSaleAllocations_(saleId);
+    deleteAllocationsBySaleId_(saleId);
+  } catch (e) { /* silent */ }
+  try {
+    invalidateSaleLookupMapCache_();
+    var broken = findSaleById_(saleId);
+    if (broken && saleSheet) {
+      // Status is the 7th column in getSalesHeaders_()
+      saleSheet.getRange(broken._rowNumber, 7, 1, 1).setValue("_BROKEN_");
+    }
+  } catch (e) { /* silent */ }
+}
+
+/* ================================================================
+   Financial Reconciliation Tool (Fix #6)
+   ================================================================ */
+
+/**
+ * Reconciliation Tool: Scans all sales records and compares Sales.TotalAmount
+ * with the authoritative sum of corresponding Sale_Items.TotalPrice.
+ *
+ * @param {boolean} [autoFix=false] If true, automatically synchronizes the Sales header with the line items sum.
+ * @returns {Object} Report of verified, mismatched, and repaired records.
+ */
+function reconcileSalesTotals(autoFix) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var saleSheet = getSalesSheet_();
+    var salesHeaders = getSalesHeaders_();
+    var salesRecords = getSalesRecords_();
+    var allItems = getSaleItemsRecords_();
+
+    // Map saleId -> sum of item totals
+    var itemTotalsBySale = {};
+    for (var i = 0; i < allItems.length; i++) {
+      var sId = normalizeText_(allItems[i].saleId);
+      if (!itemTotalsBySale[sId]) {
+        itemTotalsBySale[sId] = 0;
+      }
+      itemTotalsBySale[sId] += toNumber_(allItems[i].totalPrice);
+    }
+
+    var totalCol = -1;
+    for (var h = 0; h < salesHeaders.length; h++) {
+      if (salesHeaders[h] === "TotalAmount") {
+        totalCol = h + 1;
+        break;
+      }
+    }
+
+    var report = {
+      totalSalesChecked: salesRecords.length,
+      matched: 0,
+      mismatches: [],
+      fixed: 0,
+    };
+
+    for (var s = 0; s < salesRecords.length; s++) {
+      var sale = salesRecords[s];
+      var storedHeaderTotal = Math.round(toNumber_(sale.totalAmount) * 100) / 100;
+      var sId = normalizeText_(sale.id);
+      var calculatedItemsTotal = Math.round(toNumber_(itemTotalsBySale[sId] || 0) * 100) / 100;
+
+      if (Math.abs(storedHeaderTotal - calculatedItemsTotal) > 0.001) {
+        report.mismatches.push({
+          saleId: sale.id,
+          invoiceNumber: sale.invoiceNumber,
+          rowNumber: sale._rowNumber,
+          storedTotal: storedHeaderTotal,
+          calculatedTotal: calculatedItemsTotal,
+          difference: Math.round((storedHeaderTotal - calculatedItemsTotal) * 100) / 100,
+        });
+
+        if (autoFix && totalCol > 0 && sale._rowNumber) {
+          saleSheet.getRange(sale._rowNumber, totalCol, 1, 1).setValue(calculatedItemsTotal);
+          report.fixed++;
+        }
+      } else {
+        report.matched++;
+      }
+    }
+
+    if (autoFix && report.fixed > 0) {
+      invalidateDataCache_();
+      invalidateSaleLookupMapCache_();
+    }
+
+    return successResponse_(report);
+  } finally {
+    lock.releaseLock();
+  }
 }

@@ -14,20 +14,7 @@ function getPurchasesPageMeta(token) {
    ================================================================ */
 function getSuppliersList(token) {
   assertAdminRole_(token);
-  var purchases = getPurchaseRecords_();
-  var suppliers = [];
-  for (var i = 0; i < purchases.length; i++) {
-    var s = normalizeText_(purchases[i].supplier);
-    if (s && suppliers.indexOf(s) === -1) {
-      suppliers.push(s);
-    }
-  }
-  suppliers = suppliers.concat([
-    "Generic Supplier",
-    "Pharma Distributor",
-    "Local Vendor",
-  ]);
-  return successResponse_({ suppliers: suppliers });
+  return successResponse_({ suppliers: getPurchaseSuppliers_() });
 }
 
 function getPurchases(token) {
@@ -504,20 +491,36 @@ function validatePurchasePayload_(payload, existingId) {
 }
 
 function getPurchaseSuppliers_() {
-  var purchases = getPurchaseRecords_();
+  var masterSuppliers = getSupplierRecords_();
   var suppliers = [];
+  var seen = {};
 
-  purchases.forEach(function (purchase) {
-    if (purchase.supplier && suppliers.indexOf(purchase.supplier) === -1) {
-      suppliers.push(purchase.supplier);
+  masterSuppliers.forEach(function (sup) {
+    var sName = normalizeText_(sup.name);
+    if (sName && !seen[sName.toLowerCase()]) {
+      seen[sName.toLowerCase()] = true;
+      suppliers.push(sName);
     }
   });
 
-  return suppliers.concat([
-    "Generic Supplier",
-    "Pharma Distributor",
-    "Local Vendor",
-  ]);
+  if (suppliers.length === 0) {
+    var purchases = getPurchaseRecords_();
+    purchases.forEach(function (purchase) {
+      var sName = normalizeText_(purchase.supplier);
+      if (sName && !seen[sName.toLowerCase()]) {
+        seen[sName.toLowerCase()] = true;
+        suppliers.push(sName);
+      }
+    });
+    ["Generic Supplier", "Pharma Distributor", "Local Vendor"].forEach(function (d) {
+      if (!seen[d.toLowerCase()]) {
+        seen[d.toLowerCase()] = true;
+        suppliers.push(d);
+      }
+    });
+  }
+
+  return suppliers;
 }
 
 

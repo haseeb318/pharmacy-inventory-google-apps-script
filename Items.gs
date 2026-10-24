@@ -189,7 +189,16 @@ function getItemsHeaders_() {
 
 function getItemCategories_() {
   return [
-   https://script.google.com/macros/s/AKfycbyeK9S0iblZwvoboL6rA4b1iwxd9Nrv17iiU_KeAWolaS5JgYlqITy5dDA0h2VEM1KvZA/exec
+    "Tablet",
+    "Capsule",
+    "Injection",
+    "Syrup",
+    "Cream",
+    "Ointment",
+    "Eye Drops",
+    "Ear Drops",
+    "Powder",
+    "Other",
   ];
 }
 
