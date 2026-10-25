@@ -58,29 +58,25 @@ function deleteAllocationsBySaleId_(saleId) {
   }
   if (saleIdColIndex === -1) return;
 
-  var dataRange = sheet.getDataRange();
-  var allRows = dataRange.getValues();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
 
-  if (allRows.length < 2) return;
+  var saleIds = sheet
+    .getRange(2, saleIdColIndex + 1, lastRow - 1, 1)
+    .getValues();
+  var deleteStart = 0;
+  var deleteCount = 0;
 
-  // PERFORMANCE: Read-filter-rewrite instead of N individual deleteRow calls
-  var keepRows = [allRows[0]];
-  for (var i = 1; i < allRows.length; i++) {
-    if (normalizeText_(allRows[i][saleIdColIndex]) !== normalizedSaleId) {
-      keepRows.push(allRows[i]);
+  for (var i = saleIds.length - 1; i >= 0; i--) {
+    if (normalizeText_(saleIds[i][0]) === normalizedSaleId) {
+      deleteStart = i + 2;
+      deleteCount++;
+    } else if (deleteCount > 0) {
+      sheet.deleteRows(deleteStart, deleteCount);
+      deleteCount = 0;
     }
   }
-
-  if (keepRows.length === allRows.length) return;
-
-  // Fix #7: Clear ONLY data rows (row 2 onwards), keeping Row 1 headers, formatting & validations intact
-  var lastRow = sheet.getLastRow();
-  var lastCol = sheet.getLastColumn();
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
-  }
-  if (keepRows.length > 1) {
-    var dataToSet = keepRows.slice(1);
-    sheet.getRange(2, 1, dataToSet.length, dataToSet[0].length).setValues(dataToSet);
+  if (deleteCount > 0) {
+    sheet.deleteRows(deleteStart, deleteCount);
   }
 }

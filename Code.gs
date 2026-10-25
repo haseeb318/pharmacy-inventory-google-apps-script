@@ -56,8 +56,6 @@ function onOpen() {
       .addItem("🛡️ Setup Sheet Validations & Protections", "menuSetupValidations_")
       .addItem("🔄 Reconcile Sales Financials", "menuReconcileSalesTotals_")
       .addItem("🛠️ Repair Database Issues", "menuRepairDatabase_")
-      .addSeparator()
-      .addItem("👥 Populate Customers & Suppliers from History", "menuMigrateCustomersAndSuppliers_")
       .addToUi();
   } catch (e) {
     // Silent when run from Web App execution context where getUi() is unavailable
@@ -99,14 +97,4 @@ function menuRepairDatabase_() {
   var ui = SpreadsheetApp.getUi();
   var res = repairDatabaseIntegrity();
   ui.alert("Repair Complete", "✅ " + res.data.message + "\nOrphaned allocations removed: " + res.data.repairs.orphanedAllocationsRemoved + "\nFinancial totals synced: " + res.data.repairs.financialTotalsSynced, ui.ButtonSet.OK);
-}
-
-function menuMigrateCustomersAndSuppliers_() {
-  var ui = SpreadsheetApp.getUi();
-  var res = migrateExtractCustomersAndSuppliers();
-  if (res.success) {
-    ui.alert("Migration Complete", "✅ " + res.data.message + "\n- Customers Created: " + res.data.customersCreated + "\n- Suppliers Created: " + res.data.suppliersCreated, ui.ButtonSet.OK);
-  } else {
-    ui.alert("Migration Error", res.message || "Failed to migrate.", ui.ButtonSet.OK);
-  }
 }

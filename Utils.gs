@@ -90,6 +90,15 @@ function invalidateDataCache_() {
   CACHE_.invalidateAll();
 }
 
+function invalidateAllCaches_() {
+  invalidateDataCache_();
+  invalidateStockMapCache_();
+  invalidateSaleLookupMapCache_();
+  invalidateItemLookupMapCache_();
+  invalidatePurchaseLookupMapCache_();
+  invalidatePurchasesByItemMapCache_();
+}
+
 function successResponse_(data, message) {
   return {
     success: true,
@@ -153,31 +162,36 @@ function syncEmptySheetHeaders_(sheet, headers) {
 
 function getSheetRecords_(sheetName, headers) {
   var sheet = getOrCreateSheet_(sheetName, headers || []);
-  var values = sheet.getDataRange().getValues();
+  var lastRow = sheet.getLastRow();
 
-  if (values.length < 2) {
-    return [];
-  }
+  if (lastRow < 2) return [];
 
+  var columnCount =
+    headers && headers.length ? headers.length : sheet.getLastColumn();
+  var values = sheet.getRange(1, 1, lastRow, columnCount).getValues();
   var headerRow = values[0].map(function (header) {
     return normalizeText_(header);
   });
 
   return values
     .slice(1)
-    .filter(function (row) {
-      return row.some(function (cell) {
+    .map(function (row, rowIndex) {
+      return {
+        row: row,
+        rowNumber: rowIndex + 2,
+      };
+    })
+    .filter(function (entry) {
+      return entry.row.some(function (cell) {
         return normalizeText_(cell) !== "";
       });
     })
-    .map(function (row, rowIndex) {
-      var record = {
-        _rowNumber: rowIndex + 2,
-      };
+    .map(function (entry) {
+      var record = { _rowNumber: entry.rowNumber };
 
       headerRow.forEach(function (header, index) {
         if (header) {
-          record[header] = row[index];
+          record[header] = entry.row[index];
         }
       });
 

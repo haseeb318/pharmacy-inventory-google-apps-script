@@ -201,7 +201,7 @@ function setupDatabaseValidations() {
  * or edit restriction to prevent users from accidentally renaming columns.
  */
 function protectDatabaseHeaders() {
-  var sheetNames = ["Sales", "Sale_Items", "Purchases", "SalesAllocations", "Items", "Users", "Customers", "Suppliers"];
+  var sheetNames = ["Sales", "Sale_Items", "Purchases", "SalesAllocations", "Items", "Users"];
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var protectedSheets = [];
 
@@ -388,9 +388,11 @@ function repairDatabaseIntegrity() {
 
     // 2. Re-sync financial mismatches
     if (issues.financialMismatches.length > 0) {
-      var recon = reconcileSalesTotals(true);
+      var recon = reconcileSalesTotals_(true);
       if (recon.success) {
         repairs.financialTotalsSynced = recon.data.fixed || 0;
+      } else {
+        return recon;
       }
     }
 

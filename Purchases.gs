@@ -491,36 +491,19 @@ function validatePurchasePayload_(payload, existingId) {
 }
 
 function getPurchaseSuppliers_() {
-  var masterSuppliers = getSupplierRecords_();
+  var purchases = getPurchaseRecords_();
   var suppliers = [];
-  var seen = {};
 
-  masterSuppliers.forEach(function (sup) {
-    var sName = normalizeText_(sup.name);
-    if (sName && !seen[sName.toLowerCase()]) {
-      seen[sName.toLowerCase()] = true;
-      suppliers.push(sName);
+  purchases.forEach(function (purchase) {
+    if (purchase.supplier && suppliers.indexOf(purchase.supplier) === -1) {
+      suppliers.push(purchase.supplier);
     }
   });
 
-  if (suppliers.length === 0) {
-    var purchases = getPurchaseRecords_();
-    purchases.forEach(function (purchase) {
-      var sName = normalizeText_(purchase.supplier);
-      if (sName && !seen[sName.toLowerCase()]) {
-        seen[sName.toLowerCase()] = true;
-        suppliers.push(sName);
-      }
-    });
-    ["Generic Supplier", "Pharma Distributor", "Local Vendor"].forEach(function (d) {
-      if (!seen[d.toLowerCase()]) {
-        seen[d.toLowerCase()] = true;
-        suppliers.push(d);
-      }
-    });
-  }
-
-  return suppliers;
+  return suppliers.concat([
+    "Generic Supplier",
+    "Pharma Distributor",
+    "Local Vendor",
+  ]);
 }
-
 

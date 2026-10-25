@@ -199,8 +199,9 @@ function updateSale(id, payload, token) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
-  // Fix #1: Declare outside try so the catch block can reference it for rollback
   var saleId = null;
+  var updateSnapshot = null;
+  var updateStarted = false;
 
   try {
     assertAuthenticatedRole_(token, ["Admin", "Staff"]);
@@ -218,6 +219,20 @@ function updateSale(id, payload, token) {
       throw new Error("Sale was not found.");
     }
 
+    var saleSheet = getSalesSheet_();
+    var saleHeaders = getSalesHeaders_();
+    updateSnapshot = {
+      header: saleSheet
+        .getRange(existing._rowNumber, 1, 1, saleHeaders.length)
+        .getValues()[0],
+      items: findSaleItemsBySaleId_(saleId),
+      allocations: getSalesAllocationsRecords_().filter(function (allocation) {
+        return allocation.saleId === saleId;
+      }),
+      rowNumber: existing._rowNumber,
+    };
+
+    updateStarted = true;
     // Restore exactly what was allocated for this sale (all items)
     restoreSaleAllocations_(saleId);
 
@@ -236,7 +251,6 @@ function updateSale(id, payload, token) {
     }
     totalAmount = Math.round(totalAmount * 100) / 100;
 
-    var saleSheet = getSalesSheet_();
     var headers = getSalesHeaders_();
     var rowValues = [];
     for (var h = 0; h < headers.length; h++) {
@@ -328,11 +342,17 @@ function updateSale(id, payload, token) {
       },
     });
   } catch (error) {
-    // Fix #1: Best-effort compensating rollback for partial new allocations
-    rollbackUpdateSale_(saleId, getSalesSheet_());
+    var failureMessage = error.message;
+    if (updateStarted) {
+      try {
+        rollbackUpdateSale_(saleId, getSalesSheet_(), updateSnapshot);
+      } catch (rollbackError) {
+        failureMessage += " " + rollbackError.message;
+      }
+    }
     invalidateDataCache_();
     invalidatePurchasesByItemMapCache_();
-    return errorResponse_(error.message);
+    return errorResponse_(failureMessage);
   } finally {
     lock.releaseLock();
   }
@@ -459,30 +479,26 @@ function deleteSaleItemsBySaleId_(saleId) {
   }
   if (saleIdColIndex === -1) return;
 
-  var dataRange = sheet.getDataRange();
-  var allRows = dataRange.getValues();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
 
-  if (allRows.length < 2) return; // only header row
+  var saleIds = sheet
+    .getRange(2, saleIdColIndex + 1, lastRow - 1, 1)
+    .getValues();
+  var deleteStart = 0;
+  var deleteCount = 0;
 
-  // PERFORMANCE: Read-filter-rewrite instead of N individual deleteRow calls
-  var keepRows = [allRows[0]]; // always keep header
-  for (var i = 1; i < allRows.length; i++) {
-    if (normalizeText_(allRows[i][saleIdColIndex]) !== normalizedSaleId) {
-      keepRows.push(allRows[i]);
+  for (var i = saleIds.length - 1; i >= 0; i--) {
+    if (normalizeText_(saleIds[i][0]) === normalizedSaleId) {
+      deleteStart = i + 2;
+      deleteCount++;
+    } else if (deleteCount > 0) {
+      sheet.deleteRows(deleteStart, deleteCount);
+      deleteCount = 0;
     }
   }
-
-  if (keepRows.length === allRows.length) return; // nothing to delete
-
-  // Fix #7: Clear ONLY data rows (row 2 onwards), keeping Row 1 headers, formatting & validations intact
-  var lastRow = sheet.getLastRow();
-  var lastCol = sheet.getLastColumn();
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, lastCol).clearContent();
-  }
-  if (keepRows.length > 1) {
-    var dataToSet = keepRows.slice(1);
-    sheet.getRange(2, 1, dataToSet.length, dataToSet[0].length).setValues(dataToSet);
+  if (deleteCount > 0) {
+    sheet.deleteRows(deleteStart, deleteCount);
   }
 }
 
@@ -572,11 +588,6 @@ function getSalesRecords_() {
     var saleId = normalizeText_(record.ID);
     var saleItems = saleItemsMap[saleId] || [];
 
-    var totalAmount = 0;
-    for (var i = 0; i < saleItems.length; i++) {
-      totalAmount += saleItems[i].totalPrice;
-    }
-
     return {
       id: saleId,
       invoiceNumber: normalizeText_(record.InvoiceNumber),
@@ -586,7 +597,7 @@ function getSalesRecords_() {
       paymentMethod: normalizeText_(record.PaymentMethod),
       status: normalizeText_(record.Status),
       notes: normalizeText_(record.Notes),
-      totalAmount: totalAmount,
+      totalAmount: toNumber_(record.TotalAmount),
       itemCount: saleItems.length,
       items: saleItems,
       createdBy: normalizeText_(record.CreatedBy),
@@ -754,37 +765,23 @@ function validateSalePayload_(payload, existingId, purchasesByItem) {
 }
 
 function getSalesCustomers_() {
-  var masterCustomers = getCustomerRecords_();
+  var sales = getSalesRecords_();
   var seen = {};
   var customers = [];
 
-  masterCustomers.forEach(function (c) {
-    var name = normalizeText_(c.name);
-    if (name && !seen[name.toLowerCase()]) {
-      seen[name.toLowerCase()] = true;
+  sales.forEach(function (sale) {
+    var name = sale.customerName;
+    if (name && !seen[name]) {
+      seen[name] = true;
       customers.push(name);
     }
   });
 
-  if (customers.length === 0) {
-    var sales = getSalesRecords_();
-    sales.forEach(function (sale) {
-      var name = normalizeText_(sale.customerName);
-      if (name && !seen[name.toLowerCase()]) {
-        seen[name.toLowerCase()] = true;
-        customers.push(name);
-      }
-    });
-
-    ["Walk-in Customer", "Retail Customer", "Wholesale Customer"].forEach(function (defName) {
-      if (!seen[defName.toLowerCase()]) {
-        seen[defName.toLowerCase()] = true;
-        customers.push(defName);
-      }
-    });
-  }
-
-  return customers;
+  return customers.concat([
+    "Walk-in Customer",
+    "Retail Customer",
+    "Wholesale Customer",
+  ]);
 }
 
 /* ================================================================
@@ -1069,17 +1066,6 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
     throw new Error("Insufficient stock for this sale.");
   }
 
-  // STEP 1 (Fix #3): Decrement purchase stock FIRST.
-  // If the script dies after this point but before alloc records are written,
-  // restoreSaleAllocations_ finds no rows and won't double-restore.
-  // A slight undercount is safer than phantom excess stock.
-  for (var u = 0; u < remainingUpdates.length; u++) {
-    purchaseSheet
-      .getRange(remainingUpdates[u].rowNumber, remainingCol, 1, 1)
-      .setValue(remainingUpdates[u].newValue);
-  }
-
-  // STEP 2 (Fix #7): Batch-write all allocation records in ONE setValues call.
   var allocRows = [];
   var fullAllocations = [];
   for (var a = 0; a < pendingAllocations.length; a++) {
@@ -1105,11 +1091,60 @@ function allocateSaleBatches_(saleId, itemId, quantityToSell, itemPurchases) {
     });
   }
 
-  if (allocRows.length > 0) {
-    var allocStartRow = allocSheet.getLastRow() + 1;
-    allocSheet
-      .getRange(allocStartRow, 1, allocRows.length, allocRows[0].length)
-      .setValues(allocRows);
+  var allocStartRow = null;
+  var stockWritesCompleted = 0;
+  try {
+    for (var u = 0; u < remainingUpdates.length; u++) {
+      purchaseSheet
+        .getRange(remainingUpdates[u].rowNumber, remainingCol, 1, 1)
+        .setValue(remainingUpdates[u].newValue);
+      stockWritesCompleted++;
+    }
+
+    if (allocRows.length > 0) {
+      allocStartRow = allocSheet.getLastRow() + 1;
+      allocSheet
+        .getRange(allocStartRow, 1, allocRows.length, allocRows[0].length)
+        .setValues(allocRows);
+    }
+  } catch (error) {
+    var rollbackError = null;
+    if (allocStartRow !== null) {
+      try {
+        allocSheet
+          .getRange(allocStartRow, 1, allocRows.length, allocRows[0].length)
+          .clearContent();
+      } catch (clearError) {
+        rollbackError = clearError;
+      }
+    }
+    for (
+      var rollbackIndex = stockWritesCompleted - 1;
+      rollbackIndex >= 0;
+      rollbackIndex--
+    ) {
+      try {
+        purchaseSheet
+          .getRange(remainingUpdates[rollbackIndex].rowNumber, remainingCol, 1, 1)
+          .setValue(
+            remainingUpdates[rollbackIndex].newValue +
+              pendingAllocations[rollbackIndex].consumedQuantity,
+          );
+      } catch (restoreError) {
+        if (!rollbackError) rollbackError = restoreError;
+      }
+    }
+    invalidateDataCache_();
+    invalidateStockMapCache_();
+    invalidatePurchasesByItemMapCache_();
+    if (rollbackError) {
+      throw new Error(
+        error.message +
+          " Allocation/stock rollback also failed: " +
+          rollbackError.message,
+      );
+    }
+    throw error;
   }
 
   return fullAllocations;
@@ -1149,56 +1184,86 @@ function restoreSaleAllocations_(saleId) {
     }
   }
 
-  // Group consumed quantities by PurchaseID (with rowNumber fallback for legacy records)
+  // Group consumed quantities by PurchaseID.
   var restoreByPurchase = {};
   allocations.forEach(function (a) {
     var pid = normalizeText_(a.purchaseId);
-    var targetKey = pid ? "ID:" + pid : "ROW:" + a.batchRowNumber;
+    if (!pid) {
+      throw new Error(
+        "Cannot restore allocation without a PurchaseID. Allocation: " +
+          a.id,
+      );
+    }
+    var targetKey = "ID:" + pid;
     if (!restoreByPurchase[targetKey]) {
       restoreByPurchase[targetKey] = {
         purchaseId: pid,
-        fallbackRow: toNumber_(a.batchRowNumber),
         qty: 0,
       };
     }
     restoreByPurchase[targetKey].qty += toNumber_(a.consumedQuantity);
   });
 
-  // Restore each affected batch row directly
+  var restoreUpdates = [];
   for (var key in restoreByPurchase) {
     if (restoreByPurchase.hasOwnProperty(key)) {
       var item = restoreByPurchase[key];
-      var targetRow = null;
-
-      // 1. Primary: Locate current live row using PurchaseID
-      if (item.purchaseId && idToRowMap[item.purchaseId]) {
-        targetRow = idToRowMap[item.purchaseId];
-      }
-      // 2. Fallback: Use batchRowNumber only if PurchaseID not found / legacy row
-      else if (item.fallbackRow && item.fallbackRow >= 2 && item.fallbackRow <= lastPurchaseRow) {
-        targetRow = item.fallbackRow;
-      }
-
-      if (targetRow) {
-        var currentVal = toNumber_(
-          purchaseSheet.getRange(targetRow, remainingCol, 1, 1).getValue(),
-        );
-        purchaseSheet
-          .getRange(targetRow, remainingCol, 1, 1)
-          .setValue(currentVal + item.qty);
-      } else {
-        Logger.log(
-          "Warning: Could not locate purchase batch for restoration. ID: " +
-            item.purchaseId +
-            ", Fallback row: " +
-            item.fallbackRow,
+      var targetRow = idToRowMap[item.purchaseId];
+      if (!targetRow) {
+        throw new Error(
+          "Cannot restore allocation; purchase batch was not found: " +
+            item.purchaseId,
         );
       }
+      var currentVal = toNumber_(
+        purchaseSheet.getRange(targetRow, remainingCol, 1, 1).getValue(),
+      );
+      restoreUpdates.push({
+        rowNumber: targetRow,
+        oldValue: currentVal,
+        newValue: currentVal + item.qty,
+      });
     }
   }
 
-  // Delete allocation records by SaleID (immune to row-index shifting)
-  deleteAllocationsBySaleId_(saleId);
+  var restoredCount = 0;
+  try {
+    for (
+      var updateIndex = 0;
+      updateIndex < restoreUpdates.length;
+      updateIndex++
+    ) {
+      purchaseSheet
+        .getRange(restoreUpdates[updateIndex].rowNumber, remainingCol, 1, 1)
+        .setValue(restoreUpdates[updateIndex].newValue);
+      restoredCount++;
+    }
+    deleteAllocationsBySaleId_(saleId);
+  } catch (error) {
+    var rollbackError = null;
+    for (
+      var rollbackIndex = restoredCount - 1;
+      rollbackIndex >= 0;
+      rollbackIndex--
+    ) {
+      try {
+        purchaseSheet
+          .getRange(restoreUpdates[rollbackIndex].rowNumber, remainingCol, 1, 1)
+          .setValue(restoreUpdates[rollbackIndex].oldValue);
+      } catch (restoreError) {
+        if (!rollbackError) rollbackError = restoreError;
+      }
+    }
+    invalidateDataCache_();
+    invalidateStockMapCache_();
+    invalidatePurchasesByItemMapCache_();
+    if (rollbackError) {
+      throw new Error(
+        error.message + " Stock rollback also failed: " + rollbackError.message,
+      );
+    }
+    throw error;
+  }
 
   // Invalidate stock and related lookup caches
   invalidateDataCache_();
@@ -1272,30 +1337,132 @@ function rollbackCreateSale_(saleId, saleSheet, saleHeaderWritten) {
   }
 }
 
-/**
- * Fix #1: Best-effort compensating rollback for updateSale.
- * Because the old items are deleted before the new write loop begins,
- * a perfect undo is not possible. This function:
- *   1. Restores any NEW allocations already committed (stock returned).
- *   2. Stamps the sale as _BROKEN_ so an admin can review it.
- *
- * @param {string|null}  saleId     The sale ID.
- * @param {Sheet|null}   saleSheet  The Sales sheet reference.
- */
-function rollbackUpdateSale_(saleId, saleSheet) {
+function rollbackUpdateSale_(saleId, saleSheet, snapshot) {
   if (!saleId) return;
+
   try {
     restoreSaleAllocations_(saleId);
     deleteAllocationsBySaleId_(saleId);
-  } catch (e) { /* silent */ }
-  try {
-    invalidateSaleLookupMapCache_();
-    var broken = findSaleById_(saleId);
-    if (broken && saleSheet) {
-      // Status is the 7th column in getSalesHeaders_()
-      saleSheet.getRange(broken._rowNumber, 7, 1, 1).setValue("_BROKEN_");
+
+    deleteSaleItemsBySaleId_(saleId);
+    saleSheet
+      .getRange(snapshot.rowNumber, 1, 1, snapshot.header.length)
+      .setValues([snapshot.header]);
+
+    if (snapshot.items.length > 0) {
+      var itemRows = snapshot.items.map(function (item) {
+        return [
+          item.id,
+          item.saleId,
+          item.itemId,
+          item.quantity,
+          item.unitPrice,
+          item.totalPrice,
+          item.createdAt,
+          item.updatedAt,
+        ];
+      });
+      var itemSheet = getSaleItemsSheet_();
+      var itemStartRow = itemSheet.getLastRow() + 1;
+      itemSheet
+        .getRange(itemStartRow, 1, itemRows.length, itemRows[0].length)
+        .setValues(itemRows);
     }
-  } catch (e) { /* silent */ }
+
+    var oldConsumedByPurchase = {};
+    snapshot.allocations.forEach(function (allocation) {
+      var purchaseId = normalizeText_(allocation.purchaseId);
+      if (!purchaseId) {
+        throw new Error(
+          "Cannot restore the previous sale allocation without a PurchaseID.",
+        );
+      }
+      oldConsumedByPurchase[purchaseId] =
+        (oldConsumedByPurchase[purchaseId] || 0) +
+        toNumber_(allocation.consumedQuantity);
+    });
+
+    var purchaseSheet = getPurchasesSheet_();
+    var purchaseHeaders = getPurchasesHeaders_();
+    var purchaseColumns = getPurchasesColumnIndexMap_(
+      purchaseSheet,
+      purchaseHeaders,
+    );
+    var idColumn = purchaseColumns["ID"] || 1;
+    var remainingColumn = purchaseColumns["RemainingQuantity"] || 14;
+    var lastPurchaseRow = purchaseSheet.getLastRow();
+    var purchaseRowsById = {};
+    if (lastPurchaseRow >= 2) {
+      var purchaseIds = purchaseSheet
+        .getRange(2, idColumn, lastPurchaseRow - 1, 1)
+        .getValues();
+      purchaseIds.forEach(function (row, index) {
+        var purchaseId = normalizeText_(row[0]);
+        if (purchaseId) purchaseRowsById[purchaseId] = index + 2;
+      });
+    }
+
+    var purchaseIdsToRestore = Object.keys(oldConsumedByPurchase);
+    for (var i = 0; i < purchaseIdsToRestore.length; i++) {
+      var purchaseId = purchaseIdsToRestore[i];
+      var purchaseRow = purchaseRowsById[purchaseId];
+      if (!purchaseRow) {
+        throw new Error(
+          "Cannot restore previous allocation; purchase was not found: " +
+            purchaseId,
+        );
+      }
+      var remaining = toNumber_(
+        purchaseSheet.getRange(purchaseRow, remainingColumn).getValue(),
+      );
+      purchaseSheet
+        .getRange(purchaseRow, remainingColumn)
+        .setValue(remaining - oldConsumedByPurchase[purchaseId]);
+    }
+
+    if (snapshot.allocations.length > 0) {
+      var allocationRows = snapshot.allocations.map(function (allocation) {
+        return [
+          allocation.id,
+          allocation.saleId,
+          allocation.itemId,
+          allocation.purchaseId,
+          allocation.batchRowNumber,
+          allocation.consumedQuantity,
+          allocation.createdAt,
+          allocation.updatedAt,
+        ];
+      });
+      var allocationSheet = getSalesAllocationsSheet_();
+      var allocationStartRow = allocationSheet.getLastRow() + 1;
+      allocationSheet
+        .getRange(
+          allocationStartRow,
+          1,
+          allocationRows.length,
+          allocationRows[0].length,
+        )
+        .setValues(allocationRows);
+    }
+
+    invalidateAllCaches_();
+  } catch (rollbackError) {
+    var failureMessage =
+      "Sale update failed and its original data could not be fully restored: " +
+      rollbackError.message;
+    invalidateSaleLookupMapCache_();
+    try {
+      var broken = findSaleById_(saleId);
+      if (broken && saleSheet) {
+        saleSheet.getRange(broken._rowNumber, 7, 1, 1).setValue("_BROKEN_");
+      }
+    } catch (markError) {
+      failureMessage += " Marking the sale _BROKEN_ also failed: " +
+        markError.message;
+    }
+    invalidateAllCaches_();
+    throw new Error(failureMessage);
+  }
 }
 
 /* ================================================================
@@ -1313,68 +1480,71 @@ function reconcileSalesTotals(autoFix) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    var saleSheet = getSalesSheet_();
-    var salesHeaders = getSalesHeaders_();
-    var salesRecords = getSalesRecords_();
-    var allItems = getSaleItemsRecords_();
-
-    // Map saleId -> sum of item totals
-    var itemTotalsBySale = {};
-    for (var i = 0; i < allItems.length; i++) {
-      var sId = normalizeText_(allItems[i].saleId);
-      if (!itemTotalsBySale[sId]) {
-        itemTotalsBySale[sId] = 0;
-      }
-      itemTotalsBySale[sId] += toNumber_(allItems[i].totalPrice);
-    }
-
-    var totalCol = -1;
-    for (var h = 0; h < salesHeaders.length; h++) {
-      if (salesHeaders[h] === "TotalAmount") {
-        totalCol = h + 1;
-        break;
-      }
-    }
-
-    var report = {
-      totalSalesChecked: salesRecords.length,
-      matched: 0,
-      mismatches: [],
-      fixed: 0,
-    };
-
-    for (var s = 0; s < salesRecords.length; s++) {
-      var sale = salesRecords[s];
-      var storedHeaderTotal = Math.round(toNumber_(sale.totalAmount) * 100) / 100;
-      var sId = normalizeText_(sale.id);
-      var calculatedItemsTotal = Math.round(toNumber_(itemTotalsBySale[sId] || 0) * 100) / 100;
-
-      if (Math.abs(storedHeaderTotal - calculatedItemsTotal) > 0.001) {
-        report.mismatches.push({
-          saleId: sale.id,
-          invoiceNumber: sale.invoiceNumber,
-          rowNumber: sale._rowNumber,
-          storedTotal: storedHeaderTotal,
-          calculatedTotal: calculatedItemsTotal,
-          difference: Math.round((storedHeaderTotal - calculatedItemsTotal) * 100) / 100,
-        });
-
-        if (autoFix && totalCol > 0 && sale._rowNumber) {
-          saleSheet.getRange(sale._rowNumber, totalCol, 1, 1).setValue(calculatedItemsTotal);
-          report.fixed++;
-        }
-      } else {
-        report.matched++;
-      }
-    }
-
-    if (autoFix && report.fixed > 0) {
-      invalidateDataCache_();
-      invalidateSaleLookupMapCache_();
-    }
-
-    return successResponse_(report);
+    return reconcileSalesTotals_(autoFix);
   } finally {
     lock.releaseLock();
   }
+}
+
+function reconcileSalesTotals_(autoFix) {
+  var saleSheet = getSalesSheet_();
+  var salesHeaders = getSalesHeaders_();
+  var salesRecords = getSalesRecords_();
+  var allItems = getSaleItemsRecords_();
+
+  var itemTotalsBySale = {};
+  for (var i = 0; i < allItems.length; i++) {
+    var sId = normalizeText_(allItems[i].saleId);
+    if (!itemTotalsBySale[sId]) {
+      itemTotalsBySale[sId] = 0;
+    }
+    itemTotalsBySale[sId] += toNumber_(allItems[i].totalPrice);
+  }
+
+  var totalCol = -1;
+  for (var h = 0; h < salesHeaders.length; h++) {
+    if (salesHeaders[h] === "TotalAmount") {
+      totalCol = h + 1;
+      break;
+    }
+  }
+
+  var report = {
+    totalSalesChecked: salesRecords.length,
+    matched: 0,
+    mismatches: [],
+    fixed: 0,
+  };
+
+  for (var s = 0; s < salesRecords.length; s++) {
+    var sale = salesRecords[s];
+    var storedHeaderTotal = Math.round(toNumber_(sale.totalAmount) * 100) / 100;
+    var sId = normalizeText_(sale.id);
+    var calculatedItemsTotal = Math.round(toNumber_(itemTotalsBySale[sId] || 0) * 100) / 100;
+
+    if (Math.abs(storedHeaderTotal - calculatedItemsTotal) > 0.001) {
+      report.mismatches.push({
+        saleId: sale.id,
+        invoiceNumber: sale.invoiceNumber,
+        rowNumber: sale._rowNumber,
+        storedTotal: storedHeaderTotal,
+        calculatedTotal: calculatedItemsTotal,
+        difference: Math.round((storedHeaderTotal - calculatedItemsTotal) * 100) / 100,
+      });
+
+      if (autoFix && totalCol > 0 && sale._rowNumber) {
+        saleSheet.getRange(sale._rowNumber, totalCol, 1, 1).setValue(calculatedItemsTotal);
+        report.fixed++;
+      }
+    } else {
+      report.matched++;
+    }
+  }
+
+  if (autoFix && report.fixed > 0) {
+    invalidateDataCache_();
+    invalidateSaleLookupMapCache_();
+  }
+
+  return successResponse_(report);
 }
